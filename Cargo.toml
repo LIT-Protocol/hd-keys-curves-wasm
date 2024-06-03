@@ -1,0 +1,24 @@
+[package]
+name = "hd-keys-curves-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+blake2 = { version = "0.10", default-features = false }
+bls12_381_plus = { version = "0.8.15", features = ["std"] }
+curve25519-dalek-ml = { version = "4.2.1" , default-features = false, features = ["group"] }
+ed448-goldilocks-plus = { version = "0.11.2" }
+elliptic-curve = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"] }
+jubjub = { version = "0.10", default-features = false, git = "https://github.com/LIT-Protocol/jubjub.git" }
+k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"]  }
+p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"] }
+p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"] }
+sha2 = { version = "0.10", default-features = false }
+sha3 = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+rand_core = { version = "0.6.4", features = ["std"] }
+rand_chacha = "0.3.1"
