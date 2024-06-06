@@ -21,6 +21,10 @@ p384 = { version = "0.13", default-features = false, features = ["arithmetic", "
 sha2 = { version = "0.10", default-features = false }
 sha3 = { version = "0.10", default-features = false }
 subtle = "2.5"
+wasm-bindgen = "0.2.92"
+
+[target.'cfg(target_pointer_width = "32")'.dependencies]
+getrandom = { version = "0.2.14", features = ["js"] }
 
 [dev-dependencies]
 rand_core = { version = "0.6.4", features = ["std"] }
