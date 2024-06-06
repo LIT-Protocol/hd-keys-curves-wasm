@@ -8,16 +8,19 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 blake2 = { version = "0.10", default-features = false }
-bls12_381_plus = { version = "0.8.15", features = ["std"] }
-curve25519-dalek-ml = { version = "4.2.1" , default-features = false, features = ["group"] }
+blsful = { version = "2.5.7", default-features = false, features = ["rust"] }
+curve25519-dalek-ml = { version = "4.2.1" , default-features = false, features = ["digest", "group"] }
+ecdsa = { version = "0.16", features = ["arithmetic"] }
 ed448-goldilocks-plus = { version = "0.11.2" }
 elliptic-curve = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"] }
+digest = { version = "0.10.7", default-features = false, features = ["alloc"] }
 jubjub = { version = "0.10", default-features = false, git = "https://github.com/LIT-Protocol/jubjub.git" }
-k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"]  }
-p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"] }
-p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"] }
+k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"]  }
+p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"] }
+p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"] }
 sha2 = { version = "0.10", default-features = false }
 sha3 = { version = "0.10", default-features = false }
+subtle = "2.5"
 
 [dev-dependencies]
 rand_core = { version = "0.6.4", features = ["std"] }

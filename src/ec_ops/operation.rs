@@ -1,0 +1,2126 @@
+use crate::ec_ops::consts;
+use crate::schnorr::parse_hash;
+use crate::{EcParser, HDDerivable};
+use blsful::inner_types::G2Prepared;
+use core::{
+    fmt::{self, Display, Formatter},
+    str::FromStr,
+};
+use elliptic_curve::group::prime::PrimeCurveAffine;
+use elliptic_curve::{
+    bigint::{ArrayEncoding, NonZero, U256, U384, U512, U768},
+    group::{Curve, GroupEncoding},
+    hash2curve::GroupDigest,
+    ops::{Invert, Reduce},
+    point::AffineCoordinates,
+    sec1::ToEncodedPoint,
+    CurveArithmetic, Field, Group, PrimeCurve,
+};
+use std::io::{Cursor, Read};
+use subtle::{Choice, ConstantTimeEq};
+
+#[derive(Copy, Clone, Debug)]
+#[repr(u8)]
+pub enum EcOperation {
+    EcMul = 0x10,
+    EcAdd = 0x11,
+    EcNeg = 0x12,
+    EcEqual = 0x13,
+    EcIsInfinity = 0x14,
+    EcIsValid = 0x15,
+    EcHash = 0x16,
+    EcSumOfProducts = 0x17,
+    EcPairing = 0x18,
+    ScAdd = 0x30,
+    ScMul = 0x31,
+    ScNeg = 0x32,
+    ScInvert = 0x33,
+    ScSqrt = 0x34,
+    ScEqual = 0x35,
+    ScIsZero = 0x36,
+    ScIsValid = 0x37,
+    ScFromWideBytes = 0x38,
+    ScHash = 0x39,
+    EcdsaVerify = 0x50,
+    SchnorrVerify1 = 0x51,
+    SchnorrVerify2 = 0x52,
+    BlsVerify = 0x53,
+}
+
+impl TryFrom<u8> for EcOperation {
+    type Error = &'static str;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x10 => Ok(Self::EcMul),
+            0x11 => Ok(Self::EcAdd),
+            0x12 => Ok(Self::EcNeg),
+            0x13 => Ok(Self::EcEqual),
+            0x14 => Ok(Self::EcIsInfinity),
+            0x15 => Ok(Self::EcIsValid),
+            0x16 => Ok(Self::EcHash),
+            0x17 => Ok(Self::EcSumOfProducts),
+            0x18 => Ok(Self::EcPairing),
+            0x30 => Ok(Self::ScAdd),
+            0x31 => Ok(Self::ScMul),
+            0x32 => Ok(Self::ScNeg),
+            0x33 => Ok(Self::ScInvert),
+            0x34 => Ok(Self::ScSqrt),
+            0x35 => Ok(Self::ScEqual),
+            0x36 => Ok(Self::ScIsZero),
+            0x37 => Ok(Self::ScIsValid),
+            0x38 => Ok(Self::ScFromWideBytes),
+            0x39 => Ok(Self::ScHash),
+            0x50 => Ok(Self::EcdsaVerify),
+            0x51 => Ok(Self::SchnorrVerify1),
+            0x52 => Ok(Self::SchnorrVerify2),
+            0x53 => Ok(Self::BlsVerify),
+            _ => Err("invalid value for EcOperation"),
+        }
+    }
+}
+
+impl Display for EcOperation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::EcMul => write!(f, "ec_mul"),
+            Self::EcAdd => write!(f, "ec_add"),
+            Self::EcNeg => write!(f, "ec_neg"),
+            Self::EcEqual => write!(f, "ec_equal"),
+            Self::EcIsInfinity => write!(f, "ec_is_infinity"),
+            Self::EcIsValid => write!(f, "ec_is_valid"),
+            Self::EcHash => write!(f, "ec_hash"),
+            Self::EcSumOfProducts => write!(f, "ec_sum_of_products"),
+            Self::EcPairing => write!(f, "ec_pairing"),
+            Self::ScAdd => write!(f, "scalar_add"),
+            Self::ScMul => write!(f, "scalar_mul"),
+            Self::ScNeg => write!(f, "scalar_neg"),
+            Self::ScInvert => write!(f, "scalar_invert"),
+            Self::ScSqrt => write!(f, "scalar_sqrt"),
+            Self::ScEqual => write!(f, "scalar_equal"),
+            Self::ScIsZero => write!(f, "scalar_is_zero"),
+            Self::ScIsValid => write!(f, "scalar_is_valid"),
+            Self::ScFromWideBytes => write!(f, "scalar_from_wide_bytes"),
+            Self::ScHash => write!(f, "scalar_hash"),
+            Self::EcdsaVerify => write!(f, "ecdsa_verify"),
+            Self::SchnorrVerify1 => write!(f, "schnorr_verify1"),
+            Self::SchnorrVerify2 => write!(f, "schnorr_verify2"),
+            Self::BlsVerify => write!(f, "bls_verify"),
+        }
+    }
+}
+
+impl FromStr for EcOperation {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ec_mul" => Ok(Self::EcMul),
+            "ec_add" => Ok(Self::EcAdd),
+            "ec_neg" => Ok(Self::EcNeg),
+            "ec_equal" => Ok(Self::EcEqual),
+            "ec_is_infinity" => Ok(Self::EcIsInfinity),
+            "ec_is_valid" => Ok(Self::EcIsValid),
+            "ec_hash" => Ok(Self::EcHash),
+            "ec_sum_of_products" => Ok(Self::EcSumOfProducts),
+            "ec_pairing" => Ok(Self::EcPairing),
+            "scalar_add" => Ok(Self::ScAdd),
+            "scalar_mul" => Ok(Self::ScMul),
+            "scalar_neg" => Ok(Self::ScNeg),
+            "scalar_invert" => Ok(Self::ScInvert),
+            "scalar_sqrt" => Ok(Self::ScSqrt),
+            "scalar_equal" => Ok(Self::ScEqual),
+            "scalar_is_zero" => Ok(Self::ScIsZero),
+            "scalar_is_valid" => Ok(Self::ScIsValid),
+            "scalar_from_wide_bytes" => Ok(Self::ScFromWideBytes),
+            "scalar_hash" => Ok(Self::ScHash),
+            "ecdsa_verify" => Ok(Self::EcdsaVerify),
+            "schnorr_verify1" => Ok(Self::SchnorrVerify1),
+            "schnorr_verify2" => Ok(Self::SchnorrVerify2),
+            "bls_verify" => Ok(Self::BlsVerify),
+            _ => Err("invalid string for EcOperation"),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum EcCurve {
+    P256(p256::NistP256),
+    P384(p384::NistP384),
+    K256(k256::Secp256k1),
+    Ed25519(super::Ed25519),
+    Ristretto25519(super::Ristretto25519),
+    Ed448(super::Ed448),
+    JubJub(super::JubJub),
+    Bls12381G1(blsful::inner_types::Bls12381G1),
+    Bls12381G2(blsful::inner_types::Bls12381G2),
+    Bls12381Gt(super::Bls12381Gt),
+}
+
+impl TryFrom<&[u8]> for EcCurve {
+    type Error = &'static str;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        match value {
+            consts::CURVE_NAME_PRIME256V1 => Ok(Self::P256(p256::NistP256)),
+            consts::CURVE_NAME_SECP384R1 => Ok(Self::P384(p384::NistP384)),
+            consts::CURVE_NAME_SECP256K1 => Ok(Self::K256(k256::Secp256k1)),
+            consts::CURVE_NAME_CURVE25519 => Ok(Self::Ed25519(super::Ed25519)),
+            consts::CURVE_NAME_RISTRETTO25519 => Ok(Self::Ristretto25519(super::Ristretto25519)),
+            consts::CURVE_NAME_CURVE448 => Ok(Self::Ed448(super::Ed448)),
+            consts::CURVE_NAME_JUBJUB => Ok(Self::JubJub(super::JubJub)),
+            consts::CURVE_NAME_BLS12381G1 => Ok(Self::Bls12381G1(blsful::inner_types::Bls12381G1)),
+            consts::CURVE_NAME_BLS12381G2 => Ok(Self::Bls12381G2(blsful::inner_types::Bls12381G2)),
+            consts::CURVE_NAME_BLS12381GT => Ok(Self::Bls12381Gt(super::Bls12381Gt)),
+            _ => Err("invalid value for EcCurve"),
+        }
+    }
+}
+
+impl EcCurve {
+    pub fn ec_mul(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let point = curve.parse_points::<1>(&mut cursor)?;
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = point[0] * scalar[0];
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::P384(curve) => {
+                let point = curve.parse_points::<1>(&mut cursor)?;
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = point[0] * scalar[0];
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::K256(curve) => {
+                let point = curve.parse_points::<1>(&mut cursor)?;
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = point[0] * scalar[0];
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::Ed25519(curve) => {
+                let point = curve.parse_points::<1>(&mut cursor)?;
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = point[0] * scalar[0];
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::Ristretto25519(curve) => {
+                let point = curve.parse_points::<1>(&mut cursor)?;
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = point[0] * scalar[0];
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::Ed448(curve) => {
+                let point = curve.parse_points::<1>(&mut cursor)?;
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = point[0] * scalar[0];
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::JubJub(curve) => {
+                let point = curve.parse_points::<1>(&mut cursor)?;
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = point[0] * scalar[0];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Bls12381G1(curve) => {
+                let point = curve.parse_points::<1>(&mut cursor)?;
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = point[0] * scalar[0];
+                Ok(result.to_uncompressed().to_vec())
+            }
+            Self::Bls12381G2(curve) => {
+                let point = curve.parse_points::<1>(&mut cursor)?;
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = point[0] * scalar[0];
+                Ok(result.to_uncompressed().to_vec())
+            }
+            Self::Bls12381Gt(curve) => {
+                let point = curve.parse_points::<1>(&mut cursor)?;
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = point[0] * scalar[0];
+                Ok(result.to_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn ec_add(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0] + points[1];
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::P384(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0] + points[1];
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::K256(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0] + points[1];
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::Ed25519(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0] + points[1];
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::Ristretto25519(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0] + points[1];
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::Ed448(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0] + points[1];
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::JubJub(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0] + points[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Bls12381G1(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0] + points[1];
+                Ok(result.to_uncompressed().to_vec())
+            }
+            Self::Bls12381G2(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0] + points[1];
+                Ok(result.to_uncompressed().to_vec())
+            }
+            Self::Bls12381Gt(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0] + points[1];
+                Ok(result.to_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn ec_neg(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+        match self {
+            Self::P256(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = -points[0];
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::P384(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = -points[0];
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::K256(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = -points[0];
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::Ed25519(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = -points[0];
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::Ristretto25519(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = -points[0];
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::Ed448(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = -points[0];
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::JubJub(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = -points[0];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Bls12381G1(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = -points[0];
+                Ok(result.to_uncompressed().to_vec())
+            }
+            Self::Bls12381G2(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = -points[0];
+                Ok(result.to_uncompressed().to_vec())
+            }
+            Self::Bls12381Gt(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = -points[0];
+                Ok(result.to_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn ec_equal(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0].ct_eq(&points[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::P384(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0].ct_eq(&points[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::K256(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0].ct_eq(&points[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ed25519(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0].ct_eq(&points[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ristretto25519(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0].ct_eq(&points[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ed448(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0].ct_eq(&points[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::JubJub(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let points = points
+                    .into_iter()
+                    .map(jubjub::ExtendedPoint::from)
+                    .collect::<Vec<_>>();
+                let result = points[0].ct_eq(&points[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381G1(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0].ct_eq(&points[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381G2(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0].ct_eq(&points[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381Gt(curve) => {
+                let points = curve.parse_points::<2>(&mut cursor)?;
+                let result = points[0].ct_eq(&points[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+        }
+    }
+
+    pub fn ec_is_infinity(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+        match self {
+            Self::P256(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = points[0].is_identity();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::P384(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = points[0].is_identity();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::K256(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = points[0].is_identity();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ed25519(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = points[0].is_identity();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ristretto25519(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = points[0].is_identity();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ed448(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = points[0].is_identity();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::JubJub(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = points[0].is_identity();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381G1(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = points[0].is_identity();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381G2(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = points[0].is_identity();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381Gt(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let result = points[0].is_identity();
+                Ok(vec![result.unwrap_u8()])
+            }
+        }
+    }
+
+    pub fn ec_is_valid(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+        match self {
+            Self::P256(curve) => {
+                let _ = curve.parse_points::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::P384(curve) => {
+                let _ = curve.parse_points::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::K256(curve) => {
+                let _ = curve.parse_points::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Ed25519(curve) => {
+                let _ = curve.parse_points::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Ristretto25519(curve) => {
+                let _ = curve.parse_points::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Ed448(curve) => {
+                let _ = curve.parse_points::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::JubJub(curve) => {
+                let _ = curve.parse_points::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Bls12381G1(curve) => {
+                let _ = curve.parse_points::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Bls12381G2(curve) => {
+                let _ = curve.parse_points::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Bls12381Gt(curve) => {
+                let _ = curve.parse_points::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+        }
+    }
+
+    pub fn ec_hash_to_point(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+        let lengths = self.read_sizes::<1>(&mut cursor)?;
+        let position = cursor.position() as usize;
+        if lengths[0] > data.len() - position {
+            return Err("invalid data length");
+        }
+        let value = &data[position..position + lengths[0]];
+        match self {
+            Self::K256(_) => {
+                let point = k256::Secp256k1::hash_from_bytes::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                >(&[value], &[b"secp256k1_XMD:SHA-256_SSWU_RO_"])
+                .expect("hash to curve error");
+                Ok(point.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::P256(_) => {
+                let point = p256::NistP256::hash_from_bytes::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                >(&[value], &[b"P256_XMD:SHA-256_SSWU_RO_"])
+                .expect("hash to curve error");
+                Ok(point.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::P384(_) => {
+                let point = p384::NistP384::hash_from_bytes::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha384>,
+                >(&[value], &[b"P384_XMD:SHA-384_SSWU_RO_"])
+                .expect("hash to curve error");
+                Ok(point.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::Ed25519(_) => {
+                let point = curve25519_dalek_ml::EdwardsPoint::hash_to_curve::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha512>,
+                >(value, b"edwards25519_XMD:SHA-512_ELL2_RO_");
+                Ok(point.compress().as_bytes().to_vec())
+            }
+            Self::Ristretto25519(_) => {
+                let point =
+                    curve25519_dalek_ml::RistrettoPoint::hash_from_bytes::<sha2::Sha512>(value);
+                Ok(point.compress().as_bytes().to_vec())
+            }
+            Self::Ed448(_) => {
+                let point = ed448_goldilocks_plus::EdwardsPoint::hash::<
+                    elliptic_curve::hash2curve::ExpandMsgXof<sha3::Shake256>,
+                >(value, b"edwards448_XOF:SHAKE-256_ELL2_RO_");
+                Ok(point.compress().as_bytes().to_vec())
+            }
+            Self::JubJub(_) => {
+                let point = jubjub::SubgroupPoint::from(jubjub::ExtendedPoint::hash::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<blake2::Blake2b512>,
+                >(
+                    value,
+                    b"jubjub_XMD:BLAKE2B-512_SSWU_RO_",
+                ));
+                Ok(point.to_bytes().to_vec())
+            }
+            Self::Bls12381G1(_) => {
+                let point = blsful::inner_types::G1Projective::hash::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                >(value, b"BLS12381G1_XMD:SHA-256_SSWU_RO_");
+                Ok(point.to_uncompressed().to_vec())
+            }
+            Self::Bls12381G2(_) => {
+                let point = blsful::inner_types::G2Projective::hash::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                >(value, b"BLS12381G2_XMD:SHA-256_SSWU_RO_");
+                Ok(point.to_uncompressed().to_vec())
+            }
+            Self::Bls12381Gt(_) => {
+                let point = blsful::inner_types::G1Projective::hash::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                >(value, b"BLS12381G1_XMD:SHA-256_SSWU_RO_")
+                .to_affine();
+                let generator = blsful::inner_types::G2Affine::generator();
+                let ref_t = &[(&point, &G2Prepared::from(generator))];
+                let result = blsful::inner_types::multi_miller_loop(ref_t).final_exponentiation();
+                Ok(result.to_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn ec_sum_of_products(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+        let lengths = self.read_sizes::<1>(&mut cursor)?;
+        match self {
+            Self::P256(curve) => {
+                let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
+                let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
+                let result = p256::ProjectivePoint::sum_of_products(&points, &scalars);
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::P384(curve) => {
+                let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
+                let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
+                let result = p384::ProjectivePoint::sum_of_products(&points, &scalars);
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::K256(curve) => {
+                let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
+                let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
+                let result = k256::ProjectivePoint::sum_of_products(&points, &scalars);
+                Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
+            }
+            Self::Ed25519(curve) => {
+                let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
+                let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
+                let result = curve25519_dalek_ml::EdwardsPoint::sum_of_products(&points, &scalars);
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::Ristretto25519(curve) => {
+                let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
+                let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
+                let result =
+                    curve25519_dalek_ml::RistrettoPoint::sum_of_products(&points, &scalars);
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::Ed448(curve) => {
+                let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
+                let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
+                let result =
+                    ed448_goldilocks_plus::EdwardsPoint::sum_of_products(&points, &scalars);
+                Ok(result.compress().as_bytes().to_vec())
+            }
+            Self::JubJub(curve) => {
+                let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
+                let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
+                let result = jubjub::SubgroupPoint::sum_of_products(&points, &scalars);
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Bls12381G1(curve) => {
+                let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
+                let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
+                let result = blsful::inner_types::G1Projective::sum_of_products(&points, &scalars);
+                Ok(result.to_uncompressed().to_vec())
+            }
+            Self::Bls12381G2(curve) => {
+                let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
+                let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
+                let result = blsful::inner_types::G2Projective::sum_of_products(&points, &scalars);
+                Ok(result.to_uncompressed().to_vec())
+            }
+            Self::Bls12381Gt(curve) => {
+                let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
+                let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
+                let result = points
+                    .into_iter()
+                    .zip(scalars)
+                    .fold(blsful::inner_types::Gt::IDENTITY, |acc, (p, s)| acc + p * s);
+                Ok(result.to_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn ec_pairing(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+        let lengths = self.read_sizes::<1>(&mut cursor)?;
+
+        match self {
+            Self::P256(_)
+            | Self::P384(_)
+            | Self::K256(_)
+            | Self::Ed25519(_)
+            | Self::Ristretto25519(_)
+            | Self::Ed448(_)
+            | Self::JubJub(_) => Err("pairing operation is not supported for this curve"),
+            Self::Bls12381G1(_) | Self::Bls12381G2(_) | Self::Bls12381Gt(_) => {
+                let g1_points =
+                    blsful::inner_types::Bls12381G1.parse_points_vec(&mut cursor, lengths[0])?;
+                let g2_points =
+                    blsful::inner_types::Bls12381G2.parse_points_vec(&mut cursor, lengths[0])?;
+                let points = g1_points
+                    .into_iter()
+                    .zip(g2_points)
+                    .map(|(g1, g2)| (g1.to_affine(), G2Prepared::from(g2.to_affine())))
+                    .collect::<Vec<_>>();
+                let ref_t = points.iter().map(|(g1, g2)| (g1, g2)).collect::<Vec<_>>();
+                let result =
+                    blsful::inner_types::multi_miller_loop(ref_t.as_slice()).final_exponentiation();
+                Ok(result.to_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn scalar_add(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] + scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::P384(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] + scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::K256(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] + scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ed25519(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] + scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ristretto25519(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] + scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ed448(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] + scalars[1];
+                Ok(result.to_bytes_rfc_8032().to_vec())
+            }
+            Self::JubJub(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] + scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Bls12381G1(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] + scalars[1];
+                Ok(result.to_be_bytes().to_vec())
+            }
+            Self::Bls12381G2(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] + scalars[1];
+                Ok(result.to_be_bytes().to_vec())
+            }
+            Self::Bls12381Gt(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] + scalars[1];
+                Ok(result.to_be_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn scalar_mul(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] * scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::P384(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] * scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::K256(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] * scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ed25519(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] * scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ristretto25519(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] * scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ed448(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] * scalars[1];
+                Ok(result.to_bytes_rfc_8032().to_vec())
+            }
+            Self::JubJub(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] * scalars[1];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Bls12381G1(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] * scalars[1];
+                Ok(result.to_be_bytes().to_vec())
+            }
+            Self::Bls12381G2(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] * scalars[1];
+                Ok(result.to_be_bytes().to_vec())
+            }
+            Self::Bls12381Gt(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0] * scalars[1];
+                Ok(result.to_be_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn scalar_negate(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = -scalar[0];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::P384(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = -scalar[0];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::K256(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = -scalar[0];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ed25519(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = -scalar[0];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ristretto25519(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = -scalar[0];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ed448(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = -scalar[0];
+                Ok(result.to_bytes_rfc_8032().to_vec())
+            }
+            Self::JubJub(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = -scalar[0];
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Bls12381G1(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = -scalar[0];
+                Ok(result.to_be_bytes().to_vec())
+            }
+            Self::Bls12381G2(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = -scalar[0];
+                Ok(result.to_be_bytes().to_vec())
+            }
+            Self::Bls12381Gt(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = -scalar[0];
+                Ok(result.to_be_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn scalar_invert(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                if scalar[0].is_zero().into() {
+                    return Ok(scalar[0].to_bytes().to_vec());
+                }
+                let result = scalar[0].invert().expect("scalar is not invertible");
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::P384(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                if scalar[0].is_zero().into() {
+                    return Ok(scalar[0].to_bytes().to_vec());
+                }
+                let result = scalar[0].invert().expect("scalar is not invertible");
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::K256(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                if scalar[0].is_zero().into() {
+                    return Ok(scalar[0].to_bytes().to_vec());
+                }
+                let result = scalar[0].invert().expect("scalar is not invertible");
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ed25519(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].invert();
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ristretto25519(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].invert();
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Ed448(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].invert();
+                Ok(result.to_bytes_rfc_8032().to_vec())
+            }
+            Self::JubJub(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                if scalar[0].is_zero().into() {
+                    return Ok(scalar[0].to_bytes().to_vec());
+                }
+                let result = scalar[0].invert().expect("scalar is not invertible");
+                Ok(result.to_bytes().to_vec())
+            }
+            Self::Bls12381G1(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                if scalar[0].is_zero().into() {
+                    return Ok(scalar[0].to_be_bytes().to_vec());
+                }
+                let result = scalar[0].invert().expect("scalar is not invertible");
+                Ok(result.to_be_bytes().to_vec())
+            }
+            Self::Bls12381G2(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                if scalar[0].is_zero().into() {
+                    return Ok(scalar[0].to_be_bytes().to_vec());
+                }
+                let result = scalar[0].invert().expect("scalar is not invertible");
+                Ok(result.to_be_bytes().to_vec())
+            }
+            Self::Bls12381Gt(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                if scalar[0].is_zero().into() {
+                    return Ok(scalar[0].to_be_bytes().to_vec());
+                }
+                let result = scalar[0].invert().expect("scalar is not invertible");
+                Ok(result.to_be_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn scalar_sqrt(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].sqrt();
+                if result.is_some().into() {
+                    Ok(result.unwrap().to_bytes().to_vec())
+                } else {
+                    Err("scalar is not a quadratic residue")
+                }
+            }
+            Self::P384(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].sqrt();
+                if result.is_some().into() {
+                    Ok(result.unwrap().to_bytes().to_vec())
+                } else {
+                    Err("scalar is not a quadratic residue")
+                }
+            }
+            Self::K256(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].sqrt();
+                if result.is_some().into() {
+                    Ok(result.unwrap().to_bytes().to_vec())
+                } else {
+                    Err("scalar is not a quadratic residue")
+                }
+            }
+            Self::Ed25519(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].sqrt();
+                if result.is_some().into() {
+                    Ok(result.unwrap().to_bytes().to_vec())
+                } else {
+                    Err("scalar is not a quadratic residue")
+                }
+            }
+            Self::Ristretto25519(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].sqrt();
+                if result.is_some().into() {
+                    Ok(result.unwrap().to_bytes().to_vec())
+                } else {
+                    Err("scalar is not a quadratic residue")
+                }
+            }
+            Self::Ed448(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].sqrt();
+                if result.is_some().into() {
+                    Ok(result.unwrap().to_bytes_rfc_8032().to_vec())
+                } else {
+                    Err("scalar is not a quadratic residue")
+                }
+            }
+            Self::JubJub(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].sqrt();
+                if result.is_some().into() {
+                    Ok(result.unwrap().to_bytes().to_vec())
+                } else {
+                    Err("scalar is not a quadratic residue")
+                }
+            }
+            Self::Bls12381G1(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].sqrt();
+                if result.is_some().into() {
+                    Ok(result.unwrap().to_be_bytes().to_vec())
+                } else {
+                    Err("scalar is not a quadratic residue")
+                }
+            }
+            Self::Bls12381G2(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].sqrt();
+                if result.is_some().into() {
+                    Ok(result.unwrap().to_be_bytes().to_vec())
+                } else {
+                    Err("scalar is not a quadratic residue")
+                }
+            }
+            Self::Bls12381Gt(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].sqrt();
+                if result.is_some().into() {
+                    Ok(result.unwrap().to_be_bytes().to_vec())
+                } else {
+                    Err("scalar is not a quadratic residue")
+                }
+            }
+        }
+    }
+
+    pub fn scalar_equal(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0].ct_eq(&scalars[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::P384(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0].ct_eq(&scalars[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::K256(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0].ct_eq(&scalars[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ed25519(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0].ct_eq(&scalars[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ristretto25519(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0].ct_eq(&scalars[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ed448(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0].ct_eq(&scalars[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::JubJub(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0].ct_eq(&scalars[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381G1(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0].ct_eq(&scalars[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381G2(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0].ct_eq(&scalars[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381Gt(curve) => {
+                let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                let result = scalars[0].ct_eq(&scalars[1]);
+                Ok(vec![result.unwrap_u8()])
+            }
+        }
+    }
+
+    pub fn scalar_is_zero(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].is_zero();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::P384(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].is_zero();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::K256(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].is_zero();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ed25519(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].is_zero();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ristretto25519(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].is_zero();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Ed448(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].is_zero();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::JubJub(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].is_zero();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381G1(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].is_zero();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381G2(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].is_zero();
+                Ok(vec![result.unwrap_u8()])
+            }
+            Self::Bls12381Gt(curve) => {
+                let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                let result = scalar[0].is_zero();
+                Ok(vec![result.unwrap_u8()])
+            }
+        }
+    }
+
+    pub fn scalar_is_valid(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let _ = curve.parse_scalars::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::P384(curve) => {
+                let _ = curve.parse_scalars::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::K256(curve) => {
+                let _ = curve.parse_scalars::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Ed25519(curve) => {
+                let _ = curve.parse_scalars::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Ristretto25519(curve) => {
+                let _ = curve.parse_scalars::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Ed448(curve) => {
+                let _ = curve.parse_scalars::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::JubJub(curve) => {
+                let _ = curve.parse_scalars::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Bls12381G1(curve) => {
+                let _ = curve.parse_scalars::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Bls12381G2(curve) => {
+                let _ = curve.parse_scalars::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+            Self::Bls12381Gt(curve) => {
+                let _ = curve.parse_scalars::<1>(&mut cursor)?;
+                Ok(vec![1])
+            }
+        }
+    }
+
+    pub fn scalar_from_wide_bytes(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        match self {
+            Self::P256(_) => {
+                if data.len() < 64 {
+                    return Err("invalid operation length. Must be at least 64 bytes");
+                }
+                let (modulus, _) = NonZero::<U512>::const_new(U512::from_be_hex("0000000000000000000000000000000000000000000000000000000000000000ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"));
+                let mut value = U512::from_be_slice(&data[..64]);
+                value %= modulus;
+                let byte_array = value.to_be_byte_array();
+                Ok(byte_array.to_vec())
+            }
+            Self::P384(_) => {
+                if data.len() < 96 {
+                    return Err("invalid operation length. Must be at least 96 bytes");
+                }
+                let (modulus, _) = NonZero::<U768>::const_new(U768::from_be_hex("000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffc7635d81f4372ddf581a0db248b0a77aecec196accc52973"));
+                let mut value = U768::from_be_slice(&data[..96]);
+                value %= modulus;
+                let byte_array = value.to_be_byte_array();
+                Ok(byte_array.to_vec())
+            }
+            Self::K256(_) => {
+                if data.len() < 64 {
+                    return Err("invalid operation length. Must be at least 64 bytes");
+                }
+                let repr = k256::WideBytes::clone_from_slice(&data[..64]);
+                let scalar =
+                    <k256::Scalar as elliptic_curve::ops::Reduce<U512>>::reduce_bytes(&repr);
+                Ok(scalar.to_bytes().to_vec())
+            }
+            Self::Ed25519(_) | Self::Ristretto25519(_) => {
+                if data.len() < 64 {
+                    return Err("invalid operation length. Must be at least 64 bytes");
+                }
+                let scalar = curve25519_dalek_ml::Scalar::from_bytes_mod_order_wide(
+                    (&data[..64]).try_into().unwrap(),
+                );
+                Ok(scalar.to_bytes().to_vec())
+            }
+            Self::Ed448(_) => {
+                if data.len() < 114 {
+                    return Err("invalid operation length. Must be at least 114 bytes");
+                }
+                let wide_bytes =
+                    ed448_goldilocks_plus::WideScalarBytes::clone_from_slice(&data[..114]);
+                let scalar = ed448_goldilocks_plus::Scalar::from_bytes_mod_order_wide(&wide_bytes);
+                Ok(scalar.to_bytes_rfc_8032().to_vec())
+            }
+            Self::JubJub(_) => {
+                if data.len() < 64 {
+                    return Err("invalid operation length. Must be at least 64 bytes");
+                }
+                let scalar = jubjub::Scalar::from_bytes_wide((&data[..64]).try_into().unwrap());
+                Ok(scalar.to_bytes().to_vec())
+            }
+            Self::Bls12381G1(_) | Self::Bls12381G2(_) | Self::Bls12381Gt(_) => {
+                if data.len() < 64 {
+                    return Err("invalid operation length. Must be at least 64 bytes");
+                }
+                let scalar =
+                    blsful::inner_types::Scalar::from_bytes_wide((&data[..64]).try_into().unwrap());
+                Ok(scalar.to_be_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn scalar_hash(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+        let lengths = self.read_sizes::<1>(&mut cursor)?;
+        let position = cursor.position() as usize;
+        if lengths[0] > data.len() - position {
+            return Err("invalid operation length");
+        }
+        let value = &data[position..position + lengths[0]];
+        match self {
+            Self::K256(_) => {
+                let scalar = k256::Secp256k1::hash_to_scalar::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                >(&[value], &[b"secp256k1_XMD:SHA-256_RO_"])
+                .expect("failed to hash to scalar");
+                Ok(scalar.to_bytes().to_vec())
+            }
+            Self::P256(_) => {
+                let scalar = p256::NistP256::hash_to_scalar::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                >(&[value], &[b"P256_XMD:SHA-256_RO_"])
+                .unwrap();
+                Ok(scalar.to_bytes().to_vec())
+            }
+            Self::P384(_) => {
+                let scalar = p384::NistP384::hash_to_scalar::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha384>,
+                >(&[value], &[b"P384_XMD:SHA-384_RO_"])
+                .unwrap();
+                Ok(scalar.to_bytes().to_vec())
+            }
+            Self::Ed25519(_) | Self::Ristretto25519(_) => {
+                let scalar = curve25519_dalek_ml::Scalar::hash_from_bytes::<sha2::Sha512>(value);
+                Ok(scalar.to_bytes().to_vec())
+            }
+            Self::Ed448(_) => {
+                let scalar = ed448_goldilocks_plus::Scalar::hash::<
+                    elliptic_curve::hash2curve::ExpandMsgXof<sha3::Shake256>,
+                >(value, b"edwards448_XOF:SHAKE-256_RO_");
+                Ok(scalar.to_bytes_rfc_8032().to_vec())
+            }
+            Self::JubJub(_) => {
+                let scalar = jubjub::Scalar::hash::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<blake2::Blake2b512>,
+                >(value, b"jubjub_XMD:BLAKE2B-512_RO_");
+                Ok(scalar.to_bytes().to_vec())
+            }
+            Self::Bls12381G1(_) | Self::Bls12381G2(_) | Self::Bls12381Gt(_) => {
+                let scalar = blsful::inner_types::Scalar::hash::<
+                    elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                >(value, b"BLS12381_XMD:SHA-256_RO_");
+                Ok(scalar.to_be_bytes().to_vec())
+            }
+        }
+    }
+
+    pub fn ecdsa_verify(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+
+        match self {
+            Self::P256(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let mut signature_bytes = [0u8; 64];
+                cursor
+                    .read_exact(&mut signature_bytes)
+                    .map_err(|_| "failed to read 64 bytes")?;
+                let signature = ecdsa::Signature::<p256::NistP256>::from_slice(&signature_bytes)
+                    .map_err(|_| "failed to parse signature")?;
+                Ok(vec![self
+                    .verify_ecdsa(&points[0], &scalars[0], &signature)?
+                    .unwrap_u8()])
+            }
+            Self::P384(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let mut signature_bytes = [0u8; 96];
+                cursor
+                    .read_exact(&mut signature_bytes)
+                    .map_err(|_| "failed to read 96 bytes")?;
+                let signature = ecdsa::Signature::<p384::NistP384>::from_slice(&signature_bytes)
+                    .map_err(|_| "failed to parse signature")?;
+                Ok(vec![self
+                    .verify_ecdsa(&points[0], &scalars[0], &signature)?
+                    .unwrap_u8()])
+            }
+            Self::K256(curve) => {
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let mut signature_bytes = [0u8; 64];
+                cursor
+                    .read_exact(&mut signature_bytes)
+                    .map_err(|_| "failed to read 64 bytes")?;
+                let signature = ecdsa::Signature::<k256::Secp256k1>::from_slice(&signature_bytes)
+                    .map_err(|_| "failed to parse signature")?;
+                Ok(vec![self
+                    .verify_ecdsa(&points[0], &scalars[0], &signature)?
+                    .unwrap_u8()])
+            }
+            Self::Ed25519(_)
+            | Self::Ristretto25519(_)
+            | Self::Ed448(_)
+            | Self::JubJub(_)
+            | Self::Bls12381G1(_)
+            | Self::Bls12381G2(_)
+            | Self::Bls12381Gt(_) => Err("operation is not supported for this curve"),
+        }
+    }
+
+    pub fn schnorr_verify1(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+        let hasher = parse_hash(&mut cursor)?;
+        let position = cursor.position() as usize;
+
+        match self {
+            Self::P256(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let mut r_bytes = [0u8; 32];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let r_bytes = r_bytes.into();
+                let r =
+                    Option::<p256::FieldElement>::from(p256::FieldElement::from_bytes(&r_bytes))
+                        .ok_or("invalid signature r bytes")?;
+                if r.is_zero().into() {
+                    return Err("signature r cannot be zero");
+                }
+                let mut bytes = p256::FieldBytes::default();
+                cursor
+                    .read_exact(&mut bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let s = Option::<p256::NonZeroScalar>::from(p256::NonZeroScalar::from_repr(bytes))
+                    .ok_or("invalid signature s bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes()[1..], msg);
+                let e = <p256::Scalar as Reduce<U256>>::reduce_bytes((&e_bytes[..]).into());
+
+                let big_r =
+                    (p256::ProjectivePoint::GENERATOR * s.as_ref() - points[0] * e).to_affine();
+
+                Ok(vec![
+                    (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                ])
+            }
+            Self::P384(curve) => {
+                cursor.set_position(cursor.position() + 48);
+                let msg = &data[position..position + 48];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let mut r_bytes = [0u8; 48];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 48 bytes")?;
+                let r_bytes = r_bytes.into();
+                let r =
+                    Option::<p384::FieldElement>::from(p384::FieldElement::from_bytes(&r_bytes))
+                        .ok_or("invalid signature r bytes")?;
+                if r.is_zero().into() {
+                    return Err("signature r cannot be zero");
+                }
+                let mut bytes = p384::FieldBytes::default();
+                cursor
+                    .read_exact(&mut bytes)
+                    .map_err(|_| "failed to read 48 bytes")?;
+                let s = Option::<p384::NonZeroScalar>::from(p384::NonZeroScalar::from_repr(bytes))
+                    .ok_or("invalid signature s bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes()[1..], msg);
+                let e = <p384::Scalar as Reduce<U384>>::reduce_bytes((&e_bytes[..]).into());
+
+                let big_r =
+                    (p384::ProjectivePoint::GENERATOR * s.as_ref() - points[0] * e).to_affine();
+
+                Ok(vec![
+                    (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                ])
+            }
+            Self::K256(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let mut r_bytes = [0u8; 32];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let r_bytes = r_bytes.into();
+                let r =
+                    Option::<k256::FieldElement>::from(k256::FieldElement::from_bytes(&r_bytes))
+                        .ok_or("invalid signature r bytes")?;
+                if r.is_zero().into() {
+                    return Err("signature r cannot be zero");
+                }
+                let mut bytes = k256::FieldBytes::default();
+                cursor
+                    .read_exact(&mut bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let s = Option::<k256::NonZeroScalar>::from(k256::NonZeroScalar::from_repr(bytes))
+                    .ok_or("invalid signature s bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes()[1..], msg);
+                let e = <k256::Scalar as Reduce<U256>>::reduce_bytes((&e_bytes[..]).into());
+
+                let big_r =
+                    (k256::ProjectivePoint::GENERATOR * s.as_ref() - points[0] * e).to_affine();
+
+                Ok(vec![
+                    (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                ])
+            }
+            Self::Ed25519(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; 32];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let e_bytes =
+                    hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
+                let mut e_arr = [0u8; 64];
+                e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
+                let e = curve25519_dalek_ml::Scalar::from_bytes_mod_order_wide(&e_arr);
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if curve25519_dalek_ml::traits::IsIdentity::is_identity(&r) {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r = curve25519_dalek_ml::EdwardsPoint::vartime_double_scalar_mul_basepoint(
+                    &e,
+                    &-points[0],
+                    &s,
+                )
+                .compress();
+                Ok(vec![big_r.ct_eq(&r.compress()).unwrap_u8()])
+            }
+            Self::Ristretto25519(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; 32];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let e_bytes =
+                    hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
+                let mut e_arr = [0u8; 64];
+                e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
+                let e = curve25519_dalek_ml::Scalar::from_bytes_mod_order_wide(&e_arr);
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if curve25519_dalek_ml::traits::IsIdentity::is_identity(&r) {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r =
+                    curve25519_dalek_ml::RistrettoPoint::vartime_double_scalar_mul_basepoint(
+                        &e,
+                        &-points[0],
+                        &s,
+                    )
+                    .compress();
+                Ok(vec![big_r.ct_eq(&r.compress()).unwrap_u8()])
+            }
+            Self::Ed448(curve) => {
+                cursor.set_position(cursor.position() + 57);
+                let msg = &data[position..position + 57];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+                let mut r_bytes = [0u8; 57];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 57 bytes")?;
+                let e_bytes =
+                    hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
+                let mut e_arr = ed448_goldilocks_plus::WideScalarBytes::default();
+                e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
+                let e = ed448_goldilocks_plus::Scalar::from_bytes_mod_order_wide(&e_arr);
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if r.is_identity().into() {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r = (-points[0] * e) + ed448_goldilocks_plus::EdwardsPoint::GENERATOR * s;
+                Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
+            }
+            Self::JubJub(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; 32];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes(), msg);
+                let mut e_arr = [0u8; 64];
+                e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
+                let e = jubjub::Scalar::from_bytes_wide(&e_arr);
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if r.is_identity().into() {
+                    return Err("signature r cannot be zero");
+                }
+
+                let little_r = jubjub::ExtendedPoint::from(r);
+                let big_r = jubjub::ExtendedPoint::from(
+                    jubjub::SubgroupPoint::generator() * scalars[0] - points[0] * e,
+                );
+                Ok(vec![big_r.ct_eq(&little_r).unwrap_u8()])
+            }
+            Self::Bls12381G1(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; 96];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 96 bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_compressed(), msg);
+                let e = blsful::inner_types::Scalar::from_bytes_wide(
+                    (&e_bytes[..64]).try_into().expect("invalid e bytes length"),
+                );
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if r.is_identity().into() {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r = blsful::inner_types::G1Projective::GENERATOR * s - points[0] * e;
+                Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
+            }
+            Self::Bls12381G2(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; 192];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 192 bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_compressed(), msg);
+                let e = blsful::inner_types::Scalar::from_bytes_wide(
+                    (&e_bytes[..64]).try_into().expect("invalid e bytes length"),
+                );
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if r.is_identity().into() {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r = blsful::inner_types::G2Projective::GENERATOR * s - points[0] * e;
+                Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
+            }
+            Self::Bls12381Gt(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; blsful::inner_types::Gt::BYTES];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 576 bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes(), msg);
+                let e = blsful::inner_types::Scalar::from_bytes_wide(
+                    (&e_bytes[..64]).try_into().expect("invalid e bytes length"),
+                );
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if r.is_identity().into() {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r = blsful::inner_types::Gt::generator() * s - points[0] * e;
+                Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
+            }
+        }
+    }
+
+    pub fn schnorr_verify2(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+        let hasher = parse_hash(&mut cursor)?;
+        let position = cursor.position() as usize;
+
+        match self {
+            Self::P256(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let mut r_bytes = [0u8; 32];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let r_bytes = r_bytes.into();
+                let r =
+                    Option::<p256::FieldElement>::from(p256::FieldElement::from_bytes(&r_bytes))
+                        .ok_or("invalid signature r bytes")?;
+                if r.is_zero().into() {
+                    return Err("signature r cannot be zero");
+                }
+                let mut bytes = p256::FieldBytes::default();
+                cursor
+                    .read_exact(&mut bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let s = Option::<p256::NonZeroScalar>::from(p256::NonZeroScalar::from_repr(bytes))
+                    .ok_or("invalid signature s bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes()[1..], msg);
+                let e = <p256::Scalar as Reduce<U256>>::reduce_bytes((&e_bytes[..]).into());
+
+                let big_r =
+                    (p256::ProjectivePoint::GENERATOR * s.as_ref() + points[0] * e).to_affine();
+
+                Ok(vec![
+                    (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                ])
+            }
+            Self::P384(curve) => {
+                cursor.set_position(cursor.position() + 48);
+                let msg = &data[position..position + 48];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let mut r_bytes = [0u8; 48];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 48 bytes")?;
+                let r_bytes = r_bytes.into();
+                let r =
+                    Option::<p384::FieldElement>::from(p384::FieldElement::from_bytes(&r_bytes))
+                        .ok_or("invalid signature r bytes")?;
+                if r.is_zero().into() {
+                    return Err("signature r cannot be zero");
+                }
+                let mut bytes = p384::FieldBytes::default();
+                cursor
+                    .read_exact(&mut bytes)
+                    .map_err(|_| "failed to read 48 bytes")?;
+                let s = Option::<p384::NonZeroScalar>::from(p384::NonZeroScalar::from_repr(bytes))
+                    .ok_or("invalid signature s bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes()[1..], msg);
+                let e = <p384::Scalar as Reduce<U384>>::reduce_bytes((&e_bytes[..]).into());
+
+                let big_r =
+                    (p384::ProjectivePoint::GENERATOR * s.as_ref() + points[0] * e).to_affine();
+
+                Ok(vec![
+                    (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                ])
+            }
+            Self::K256(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                let mut r_bytes = [0u8; 32];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let r_bytes = r_bytes.into();
+                let r =
+                    Option::<k256::FieldElement>::from(k256::FieldElement::from_bytes(&r_bytes))
+                        .ok_or("invalid signature r bytes")?;
+                if r.is_zero().into() {
+                    return Err("signature r cannot be zero");
+                }
+                let mut bytes = k256::FieldBytes::default();
+                cursor
+                    .read_exact(&mut bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let s = Option::<k256::NonZeroScalar>::from(k256::NonZeroScalar::from_repr(bytes))
+                    .ok_or("invalid signature s bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes()[1..], msg);
+                let e = <k256::Scalar as Reduce<U256>>::reduce_bytes((&e_bytes[..]).into());
+
+                let big_r =
+                    (k256::ProjectivePoint::GENERATOR * s.as_ref() + points[0] * e).to_affine();
+
+                Ok(vec![
+                    (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                ])
+            }
+            Self::Ed25519(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; 32];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let e_bytes =
+                    hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
+                let mut e_arr = [0u8; 64];
+                e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
+                let e = curve25519_dalek_ml::Scalar::from_bytes_mod_order_wide(&e_arr);
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if curve25519_dalek_ml::traits::IsIdentity::is_identity(&r) {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r = curve25519_dalek_ml::EdwardsPoint::vartime_double_scalar_mul_basepoint(
+                    &e, &points[0], &s,
+                )
+                .compress();
+                Ok(vec![big_r.ct_eq(&r.compress()).unwrap_u8()])
+            }
+            Self::Ristretto25519(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; 32];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let e_bytes =
+                    hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
+                let mut e_arr = [0u8; 64];
+                e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
+                let e = curve25519_dalek_ml::Scalar::from_bytes_mod_order_wide(&e_arr);
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if curve25519_dalek_ml::traits::IsIdentity::is_identity(&r) {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r =
+                    curve25519_dalek_ml::RistrettoPoint::vartime_double_scalar_mul_basepoint(
+                        &e, &points[0], &s,
+                    )
+                    .compress();
+                Ok(vec![big_r.ct_eq(&r.compress()).unwrap_u8()])
+            }
+            Self::Ed448(curve) => {
+                cursor.set_position(cursor.position() + 57);
+                let msg = &data[position..position + 57];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+                let mut r_bytes = [0u8; 57];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 57 bytes")?;
+                let e_bytes =
+                    hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
+                let mut e_arr = ed448_goldilocks_plus::WideScalarBytes::default();
+                e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
+                let e = ed448_goldilocks_plus::Scalar::from_bytes_mod_order_wide(&e_arr);
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if r.is_identity().into() {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r = (points[0] * e) + ed448_goldilocks_plus::EdwardsPoint::GENERATOR * s;
+                Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
+            }
+            Self::JubJub(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; 32];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 32 bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes(), msg);
+                let mut e_arr = [0u8; 64];
+                e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
+                let e = jubjub::Scalar::from_bytes_wide(&e_arr);
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if r.is_identity().into() {
+                    return Err("signature r cannot be zero");
+                }
+                let little_r = jubjub::ExtendedPoint::from(r);
+
+                let big_r = jubjub::SubgroupPoint::generator() * scalars[0] + points[0] * e;
+                Ok(vec![jubjub::ExtendedPoint::from(big_r)
+                    .ct_eq(&little_r)
+                    .unwrap_u8()])
+            }
+            Self::Bls12381G1(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; 96];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 96 bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_compressed(), msg);
+                let e = blsful::inner_types::Scalar::from_bytes_wide(
+                    (&e_bytes[..64]).try_into().expect("invalid length"),
+                );
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if r.is_identity().into() {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r = blsful::inner_types::G1Projective::GENERATOR * s + points[0] * e;
+                Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
+            }
+            Self::Bls12381G2(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; 192];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 192 bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_compressed(), msg);
+                let e = blsful::inner_types::Scalar::from_bytes_wide(
+                    (&e_bytes[..64]).try_into().expect("invalid length"),
+                );
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if r.is_identity().into() {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r = blsful::inner_types::G2Projective::GENERATOR * s + points[0] * e;
+                Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
+            }
+            Self::Bls12381Gt(curve) => {
+                cursor.set_position(cursor.position() + 32);
+                let msg = &data[position..position + 32];
+                let points = curve.parse_points::<1>(&mut cursor)?;
+                if points[0].is_identity().into() {
+                    return Err("invalid public key point");
+                }
+
+                let mut r_bytes = [0u8; blsful::inner_types::Gt::BYTES];
+                cursor
+                    .read_exact(&mut r_bytes)
+                    .map_err(|_| "failed to read 576 bytes")?;
+                let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes(), msg);
+                let e = blsful::inner_types::Scalar::from_bytes_wide(
+                    (&e_bytes[..64]).try_into().expect("invalid length"),
+                );
+                let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                let s = scalars[0];
+                if s.is_zero().into() {
+                    return Err("signature s cannot be zero");
+                }
+                let r = points[0];
+                if r.is_identity().into() {
+                    return Err("signature r cannot be zero");
+                }
+
+                let big_r = blsful::inner_types::Gt::generator() * s + points[0] * e;
+                Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
+            }
+        }
+    }
+
+    pub fn bls_verify(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
+        let mut cursor = Cursor::new(data);
+        match self {
+            Self::P256(_)
+            | Self::P384(_)
+            | Self::K256(_)
+            | Self::Ed25519(_)
+            | Self::Ristretto25519(_)
+            | Self::Ed448(_)
+            | Self::JubJub(_)
+            | Self::Bls12381Gt(_) => Err("operation is not supported for this curve"),
+            Self::Bls12381G1(_) => {
+                let lengths = self.read_sizes::<1>(&mut cursor)?;
+                let position = cursor.position() as usize;
+                let msg = &data[position..position + lengths[0]];
+                cursor.set_position(cursor.position() + lengths[0] as u64);
+                let g1_points = blsful::inner_types::Bls12381G1.parse_points::<1>(&mut cursor)?;
+                let g2_points = blsful::inner_types::Bls12381G2.parse_points::<1>(&mut cursor)?;
+                let pk = blsful::PublicKey::<blsful::Bls12381G2Impl>(g1_points[0]);
+                let sig =
+                    blsful::Signature::<blsful::Bls12381G2Impl>::ProofOfPossession(g2_points[0]);
+                if sig
+                    .verify(&pk, msg)
+                    .map_err(|_| "failed to verify signature")
+                    .is_ok()
+                {
+                    Ok(vec![1u8])
+                } else {
+                    Ok(vec![0u8])
+                }
+            }
+            Self::Bls12381G2(_) => {
+                let lengths = self.read_sizes::<1>(&mut cursor)?;
+                let position = cursor.position() as usize;
+                let msg = &data[position..position + lengths[0]];
+                cursor.set_position(cursor.position() + lengths[0] as u64);
+                let g1_points = blsful::inner_types::Bls12381G2.parse_points::<1>(&mut cursor)?;
+                let g2_points = blsful::inner_types::Bls12381G1.parse_points::<1>(&mut cursor)?;
+                let pk = blsful::PublicKey::<blsful::Bls12381G1Impl>(g1_points[0]);
+                let sig =
+                    blsful::Signature::<blsful::Bls12381G1Impl>::ProofOfPossession(g2_points[0]);
+                if sig
+                    .verify(&pk, msg)
+                    .map_err(|_| "failed to verify signature")
+                    .is_ok()
+                {
+                    Ok(vec![1u8])
+                } else {
+                    Ok(vec![0u8])
+                }
+            }
+        }
+    }
+
+    fn verify_ecdsa<C>(
+        &self,
+        q: &elliptic_curve::ProjectivePoint<C>,
+        z: &elliptic_curve::Scalar<C>,
+        sig: &ecdsa::Signature<C>,
+    ) -> Result<Choice, &'static str>
+    where
+        C: PrimeCurve + CurveArithmetic,
+        ecdsa::SignatureSize<C>: elliptic_curve::generic_array::ArrayLength<u8>,
+    {
+        let (r, s) = sig.split_scalars();
+        if (r.is_zero() | s.is_zero()).into() {
+            return Err("invalid signature values. r and s must not be zero");
+        }
+
+        let s_inv = *s.invert();
+        let u1 = *z * s_inv;
+        let u2 = *r * s_inv;
+        let x = (elliptic_curve::ProjectivePoint::<C>::generator() * u1 + *q * u2)
+            .to_affine()
+            .x();
+        Ok(r.as_ref()
+            .ct_eq(&elliptic_curve::Scalar::<C>::reduce_bytes(&x)))
+    }
+
+    fn read_sizes<const N: usize>(
+        &self,
+        reader: &mut Cursor<&[u8]>,
+    ) -> Result<[usize; N], &'static str> {
+        let mut lengths = [0; N];
+        let mut slice = [0u8; 32];
+        for l_i in lengths.iter_mut() {
+            reader
+                .read_exact(&mut slice)
+                .map_err(|_| "failed to read 32 bytes")?;
+            let num = U256::from_be_slice(&slice);
+            let bits = num.bits();
+            if bits > 64 {
+                return Err("number is too large");
+            }
+            let words = num.as_words();
+            *l_i = words[0] as usize;
+        }
+        Ok(lengths)
+    }
+}
