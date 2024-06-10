@@ -88,11 +88,14 @@ pub const HASH_NAME_BLAKE2B_512: &[u8] = &[
     10, 139, 24, 34, 55, 109, 234, 231, 162, 80, 65, 254,
 ];
 
-#[test]
-fn compute_hash() {
-    use sha2::Digest;
+#[cfg(test)]
+mod test {
+    #[test]
+    fn compute_hash() {
+        use sha2::Digest;
 
-    let output: [u8; 32] = sha2::Sha256::digest(b"ristretto25519").into();
+        let output: [u8; 32] = sha2::Sha256::digest(b"ristretto25519").into();
 
-    println!("{:?}", output);
+        println!("{:?}", output);
+    }
 }

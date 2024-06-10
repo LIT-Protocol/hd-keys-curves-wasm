@@ -6,18 +6,27 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+curve25519_dalek_ml = ["dep:curve25519-dalek-ml"]
+ed448 = ["dep:ed448-goldilocks-plus"]
+k256 = ["dep:k256"]
+p256 = ["dep:p256"]
+p384 = ["dep:p384"]
+bls = ["dep:blsful"]
+jubjub = ["dep:jubjub", "dep:blake2"]
+
 [dependencies]
-blake2 = { version = "0.10", default-features = false }
-blsful = { version = "2.5.7", default-features = false, features = ["rust"] }
-curve25519-dalek-ml = { version = "4.2.1" , default-features = false, features = ["digest", "group"] }
+blake2 = { version = "0.10", default-features = false, optional = true }
+blsful = { version = "2.5.7", default-features = false, features = ["rust"], optional = true }
+curve25519-dalek-ml = { version = "4.2.1" , default-features = false, features = ["digest", "group"], optional = true }
 ecdsa = { version = "0.16", features = ["arithmetic"] }
-ed448-goldilocks-plus = { version = "0.11.2" }
+ed448-goldilocks-plus = { version = "0.11.2", optional = true }
 elliptic-curve = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"] }
 digest = { version = "0.10.7", default-features = false, features = ["alloc"] }
-jubjub = { version = "0.10", default-features = false, git = "https://github.com/LIT-Protocol/jubjub.git" }
-k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"]  }
-p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"] }
-p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"] }
+jubjub = { version = "0.10", default-features = false, git = "https://github.com/LIT-Protocol/jubjub.git", optional = true }
+k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
+p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
+p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
 sha2 = { version = "0.10", default-features = false }
 sha3 = { version = "0.10", default-features = false }
 subtle = "2.5"
