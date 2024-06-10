@@ -20,6 +20,7 @@ pub fn parse_hash(cursor: &mut Cursor<&[u8]>) -> Result<Box<dyn Challenge>, &'st
         HASH_NAME_SHA3_384 => Ok(Box::new(FixedDigest::<sha3::Sha3_384>(PhantomData))),
         HASH_NAME_SHA3_512 => Ok(Box::new(FixedDigest::<sha3::Sha3_512>(PhantomData))),
         HASH_NAME_KECCAK256 => Ok(Box::new(FixedDigest::<sha3::Keccak256>(PhantomData))),
+        #[cfg(feature = "jubjub")]
         HASH_NAME_BLAKE2B_512 => Ok(Box::new(FixedDigest::<blake2::Blake2b512>(PhantomData))),
         HASH_NAME_TAPROOT => Ok(Box::new(Taproot)),
         HASH_NAME_SHAKE128 => Ok(Box::new(ExtendableDigest::<sha3::Shake128> {

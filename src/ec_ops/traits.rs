@@ -44,6 +44,7 @@ pub trait EcParser {
     }
 }
 
+#[cfg(feature = "k256")]
 impl EcParser for k256::Secp256k1 {
     type Point = k256::ProjectivePoint;
     type Scalar = k256::Scalar;
@@ -86,6 +87,7 @@ impl EcParser for k256::Secp256k1 {
     }
 }
 
+#[cfg(feature = "p256")]
 impl EcParser for p256::NistP256 {
     type Point = p256::ProjectivePoint;
     type Scalar = p256::Scalar;
@@ -128,6 +130,7 @@ impl EcParser for p256::NistP256 {
     }
 }
 
+#[cfg(feature = "p384")]
 impl EcParser for p384::NistP384 {
     type Point = p384::ProjectivePoint;
     type Scalar = p384::Scalar;
@@ -170,6 +173,7 @@ impl EcParser for p384::NistP384 {
     }
 }
 
+#[cfg(feature = "curve25519_dalek_ml")]
 impl EcParser for Ed25519 {
     type Point = curve25519_dalek_ml::EdwardsPoint;
     type Scalar = curve25519_dalek_ml::Scalar;
@@ -209,6 +213,7 @@ impl EcParser for Ed25519 {
     }
 }
 
+#[cfg(feature = "curve25519_dalek_ml")]
 impl EcParser for Ristretto25519 {
     type Point = curve25519_dalek_ml::RistrettoPoint;
     type Scalar = curve25519_dalek_ml::Scalar;
@@ -248,6 +253,7 @@ impl EcParser for Ristretto25519 {
     }
 }
 
+#[cfg(feature = "ed448")]
 impl EcParser for Ed448 {
     type Point = ed448_goldilocks_plus::EdwardsPoint;
     type Scalar = ed448_goldilocks_plus::Scalar;
@@ -287,6 +293,7 @@ impl EcParser for Ed448 {
     }
 }
 
+#[cfg(feature = "jubjub")]
 impl EcParser for JubJub {
     type Point = jubjub::SubgroupPoint;
     type Scalar = jubjub::Scalar;
@@ -324,6 +331,7 @@ impl EcParser for JubJub {
     }
 }
 
+#[cfg(feature = "bls")]
 impl EcParser for blsful::inner_types::Bls12381G1 {
     type Point = blsful::inner_types::G1Projective;
     type Scalar = blsful::inner_types::Scalar;
@@ -363,6 +371,7 @@ impl EcParser for blsful::inner_types::Bls12381G1 {
     }
 }
 
+#[cfg(feature = "bls")]
 impl EcParser for blsful::inner_types::Bls12381G2 {
     type Point = blsful::inner_types::G2Projective;
     type Scalar = blsful::inner_types::Scalar;
@@ -402,6 +411,7 @@ impl EcParser for blsful::inner_types::Bls12381G2 {
     }
 }
 
+#[cfg(feature = "bls")]
 impl EcParser for Bls12381Gt {
     type Point = blsful::inner_types::Gt;
     type Scalar = blsful::inner_types::Scalar;
@@ -441,13 +451,18 @@ impl EcParser for Bls12381Gt {
     }
 }
 
+#[cfg(feature = "curve25519_dalek_ml")]
 #[derive(Copy, Clone, Debug)]
 pub struct Ed25519;
+#[cfg(feature = "curve25519_dalek_ml")]
 #[derive(Copy, Clone, Debug)]
 pub struct Ristretto25519;
+#[cfg(feature = "ed448")]
 #[derive(Copy, Clone, Debug)]
 pub struct Ed448;
+#[cfg(feature = "jubjub")]
 #[derive(Copy, Clone, Debug)]
 pub struct JubJub;
+#[cfg(feature = "bls")]
 #[derive(Copy, Clone, Debug)]
 pub struct Bls12381Gt;
