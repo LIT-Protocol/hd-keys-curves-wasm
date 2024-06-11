@@ -655,12 +655,12 @@ impl EcCurve {
         }
     }
 
+    #[cfg(feature = "bls")]
     pub fn ec_pairing(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
         let mut cursor = Cursor::new(data);
         let lengths = self.read_sizes::<1>(&mut cursor)?;
 
         match self {
-            #[cfg(feature = "bls")]
             Self::Bls12381G1(_) | Self::Bls12381G2(_) | Self::Bls12381Gt(_) => {
                 let g1_points =
                     blsful::inner_types::Bls12381G1.parse_points_vec(&mut cursor, lengths[0])?;
@@ -1413,6 +1413,7 @@ impl EcCurve {
         }
     }
 
+    #[cfg(any(feature = "p256", feature = "p384", feature = "k256"))]
     pub fn ecdsa_verify(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
         let mut cursor = Cursor::new(data);
 
@@ -2123,10 +2124,10 @@ impl EcCurve {
         }
     }
 
+    #[cfg(feature = "bls")]
     pub fn bls_verify(&self, data: &[u8]) -> Result<Vec<u8>, &'static str> {
         let mut cursor = Cursor::new(data);
         match self {
-            #[cfg(feature = "bls")]
             Self::Bls12381G1(_) => {
                 let lengths = self.read_sizes::<1>(&mut cursor)?;
                 let position = cursor.position() as usize;
@@ -2147,7 +2148,6 @@ impl EcCurve {
                     Ok(vec![0u8])
                 }
             }
-            #[cfg(feature = "bls")]
             Self::Bls12381G2(_) => {
                 let lengths = self.read_sizes::<1>(&mut cursor)?;
                 let position = cursor.position() as usize;
@@ -2172,6 +2172,7 @@ impl EcCurve {
         }
     }
 
+    #[cfg(any(feature = "k256", feature = "p256", feature = "p384"))]
     fn verify_ecdsa<C>(
         &self,
         q: &elliptic_curve::ProjectivePoint<C>,

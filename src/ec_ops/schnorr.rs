@@ -13,20 +13,30 @@ pub fn parse_hash(cursor: &mut Cursor<&[u8]>) -> Result<Box<dyn Challenge>, &'st
         .read_exact(&mut hash)
         .map_err(|_| "Invalid hash function")?;
     match &hash[..] {
+        #[cfg(feature = "sha2")]
         HASH_NAME_SHA2_256 => Ok(Box::new(FixedDigest::<sha2::Sha256>(PhantomData))),
+        #[cfg(feature = "sha2")]
         HASH_NAME_SHA2_384 => Ok(Box::new(FixedDigest::<sha2::Sha384>(PhantomData))),
+        #[cfg(feature = "sha2")]
         HASH_NAME_SHA2_512 => Ok(Box::new(FixedDigest::<sha2::Sha512>(PhantomData))),
+        #[cfg(feature = "sha3")]
         HASH_NAME_SHA3_256 => Ok(Box::new(FixedDigest::<sha3::Sha3_256>(PhantomData))),
+        #[cfg(feature = "sha3")]
         HASH_NAME_SHA3_384 => Ok(Box::new(FixedDigest::<sha3::Sha3_384>(PhantomData))),
+        #[cfg(feature = "sha3")]
         HASH_NAME_SHA3_512 => Ok(Box::new(FixedDigest::<sha3::Sha3_512>(PhantomData))),
+        #[cfg(feature = "sha3")]
         HASH_NAME_KECCAK256 => Ok(Box::new(FixedDigest::<sha3::Keccak256>(PhantomData))),
-        #[cfg(feature = "jubjub")]
+        #[cfg(feature = "blake2")]
         HASH_NAME_BLAKE2B_512 => Ok(Box::new(FixedDigest::<blake2::Blake2b512>(PhantomData))),
+        #[cfg(feature = "sha2")]
         HASH_NAME_TAPROOT => Ok(Box::new(Taproot)),
+        #[cfg(feature = "sha3")]
         HASH_NAME_SHAKE128 => Ok(Box::new(ExtendableDigest::<sha3::Shake128> {
             output_size: 32,
             _marker: PhantomData,
         })),
+        #[cfg(feature = "sha3")]
         HASH_NAME_SHAKE256 => Ok(Box::new(ExtendableDigest::<sha3::Shake256> {
             output_size: 64,
             _marker: PhantomData,
@@ -35,6 +45,7 @@ pub fn parse_hash(cursor: &mut Cursor<&[u8]>) -> Result<Box<dyn Challenge>, &'st
     }
 }
 
+#[cfg(feature = "sha2")]
 #[derive(Copy, Clone, Debug)]
 pub struct Taproot;
 
@@ -67,6 +78,7 @@ impl<D: Default + ExtendableOutput + Update> Challenge for ExtendableDigest<D> {
     }
 }
 
+#[cfg(feature = "sha2")]
 impl Challenge for Taproot {
     fn compute_challenge(&self, r: &[u8], pub_key: &[u8], msg: &[u8]) -> Vec<u8> {
         use sha2::Digest;
