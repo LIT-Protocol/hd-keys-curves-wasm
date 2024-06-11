@@ -2,7 +2,7 @@ use elliptic_curve::{CurveArithmetic, Field, Group, PrimeField, ScalarPrimitive}
 
 #[cfg(feature = "bls")]
 pub mod blsful;
-#[cfg(feature = "curve25519_dalek_ml")]
+#[cfg(feature = "curve25519")]
 pub mod curve25519_dalek_ml;
 #[cfg(feature = "ed448")]
 pub mod ed448_goldilocks_plus;

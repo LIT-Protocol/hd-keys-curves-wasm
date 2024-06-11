@@ -24,9 +24,9 @@ pub enum EcCurve {
     P384(p384::NistP384),
     #[cfg(feature = "k256")]
     K256(k256::Secp256k1),
-    #[cfg(feature = "curve25519_dalek_ml")]
+    #[cfg(feature = "curve25519")]
     Ed25519(super::Ed25519),
-    #[cfg(feature = "curve25519_dalek_ml")]
+    #[cfg(feature = "curve25519")]
     Ristretto25519(super::Ristretto25519),
     #[cfg(feature = "ed448")]
     Ed448(super::Ed448),
@@ -96,14 +96,14 @@ impl EcCurve {
                 let result = point[0] * scalar[0];
                 Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let point = curve.parse_points::<1>(&mut cursor)?;
                 let scalar = curve.parse_scalars::<1>(&mut cursor)?;
                 let result = point[0] * scalar[0];
                 Ok(result.compress().as_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let point = curve.parse_points::<1>(&mut cursor)?;
                 let scalar = curve.parse_scalars::<1>(&mut cursor)?;
@@ -145,7 +145,6 @@ impl EcCurve {
                 let result = point[0] * scalar[0];
                 Ok(result.to_bytes().to_vec())
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -171,13 +170,13 @@ impl EcCurve {
                 let result = points[0] + points[1];
                 Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let points = curve.parse_points::<2>(&mut cursor)?;
                 let result = points[0] + points[1];
                 Ok(result.compress().as_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let points = curve.parse_points::<2>(&mut cursor)?;
                 let result = points[0] + points[1];
@@ -213,7 +212,6 @@ impl EcCurve {
                 let result = points[0] + points[1];
                 Ok(result.to_bytes().to_vec())
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -238,13 +236,13 @@ impl EcCurve {
                 let result = -points[0];
                 Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let points = curve.parse_points::<1>(&mut cursor)?;
                 let result = -points[0];
                 Ok(result.compress().as_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let points = curve.parse_points::<1>(&mut cursor)?;
                 let result = -points[0];
@@ -280,7 +278,6 @@ impl EcCurve {
                 let result = -points[0];
                 Ok(result.to_bytes().to_vec())
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -306,13 +303,13 @@ impl EcCurve {
                 let result = points[0].ct_eq(&points[1]);
                 Ok(vec![result.unwrap_u8()])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let points = curve.parse_points::<2>(&mut cursor)?;
                 let result = points[0].ct_eq(&points[1]);
                 Ok(vec![result.unwrap_u8()])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let points = curve.parse_points::<2>(&mut cursor)?;
                 let result = points[0].ct_eq(&points[1]);
@@ -352,7 +349,6 @@ impl EcCurve {
                 let result = points[0].ct_eq(&points[1]);
                 Ok(vec![result.unwrap_u8()])
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -377,13 +373,13 @@ impl EcCurve {
                 let result = points[0].is_identity();
                 Ok(vec![result.unwrap_u8()])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let points = curve.parse_points::<1>(&mut cursor)?;
                 let result = points[0].is_identity();
                 Ok(vec![result.unwrap_u8()])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let points = curve.parse_points::<1>(&mut cursor)?;
                 let result = points[0].is_identity();
@@ -419,7 +415,6 @@ impl EcCurve {
                 let result = points[0].is_identity();
                 Ok(vec![result.unwrap_u8()])
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -441,12 +436,12 @@ impl EcCurve {
                 let _ = curve.parse_points::<1>(&mut cursor)?;
                 Ok(vec![1])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let _ = curve.parse_points::<1>(&mut cursor)?;
                 Ok(vec![1])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let _ = curve.parse_points::<1>(&mut cursor)?;
                 Ok(vec![1])
@@ -476,7 +471,6 @@ impl EcCurve {
                 let _ = curve.parse_points::<1>(&mut cursor)?;
                 Ok(vec![1])
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -513,14 +507,14 @@ impl EcCurve {
                 .expect("hash to curve error");
                 Ok(point.to_encoded_point(false).as_bytes()[1..].to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(_) => {
                 let point = curve25519_dalek_ml::EdwardsPoint::hash_to_curve::<
                     elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha512>,
                 >(value, b"edwards25519_XMD:SHA-512_ELL2_RO_");
                 Ok(point.compress().as_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(_) => {
                 let point =
                     curve25519_dalek_ml::RistrettoPoint::hash_from_bytes::<sha2::Sha512>(value);
@@ -568,7 +562,6 @@ impl EcCurve {
                 let result = blsful::inner_types::multi_miller_loop(ref_t).final_exponentiation();
                 Ok(result.to_bytes().to_vec())
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -597,14 +590,14 @@ impl EcCurve {
                 let result = k256::ProjectivePoint::sum_of_products(&points, &scalars);
                 Ok(result.to_encoded_point(false).as_bytes()[1..].to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
                 let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
                 let result = curve25519_dalek_ml::EdwardsPoint::sum_of_products(&points, &scalars);
                 Ok(result.compress().as_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
                 let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
@@ -651,7 +644,6 @@ impl EcCurve {
                     .fold(blsful::inner_types::Gt::IDENTITY, |acc, (p, s)| acc + p * s);
                 Ok(result.to_bytes().to_vec())
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -702,13 +694,13 @@ impl EcCurve {
                 let result = scalars[0] + scalars[1];
                 Ok(result.to_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let scalars = curve.parse_scalars::<2>(&mut cursor)?;
                 let result = scalars[0] + scalars[1];
                 Ok(result.to_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let scalars = curve.parse_scalars::<2>(&mut cursor)?;
                 let result = scalars[0] + scalars[1];
@@ -744,7 +736,6 @@ impl EcCurve {
                 let result = scalars[0] + scalars[1];
                 Ok(result.to_be_bytes().to_vec())
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -770,13 +761,13 @@ impl EcCurve {
                 let result = scalars[0] * scalars[1];
                 Ok(result.to_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let scalars = curve.parse_scalars::<2>(&mut cursor)?;
                 let result = scalars[0] * scalars[1];
                 Ok(result.to_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let scalars = curve.parse_scalars::<2>(&mut cursor)?;
                 let result = scalars[0] * scalars[1];
@@ -812,7 +803,6 @@ impl EcCurve {
                 let result = scalars[0] * scalars[1];
                 Ok(result.to_be_bytes().to_vec())
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -838,13 +828,13 @@ impl EcCurve {
                 let result = -scalar[0];
                 Ok(result.to_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let scalar = curve.parse_scalars::<1>(&mut cursor)?;
                 let result = -scalar[0];
                 Ok(result.to_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let scalar = curve.parse_scalars::<1>(&mut cursor)?;
                 let result = -scalar[0];
@@ -880,7 +870,6 @@ impl EcCurve {
                 let result = -scalar[0];
                 Ok(result.to_be_bytes().to_vec())
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -915,13 +904,13 @@ impl EcCurve {
                 let result = scalar[0].invert().expect("scalar is not invertible");
                 Ok(result.to_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let scalar = curve.parse_scalars::<1>(&mut cursor)?;
                 let result = scalar[0].invert();
                 Ok(result.to_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let scalar = curve.parse_scalars::<1>(&mut cursor)?;
                 let result = scalar[0].invert();
@@ -969,7 +958,6 @@ impl EcCurve {
                 let result = scalar[0].invert().expect("scalar is not invertible");
                 Ok(result.to_be_bytes().to_vec())
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -1007,7 +995,7 @@ impl EcCurve {
                     Err("scalar is not a quadratic residue")
                 }
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let scalar = curve.parse_scalars::<1>(&mut cursor)?;
                 let result = scalar[0].sqrt();
@@ -1017,7 +1005,7 @@ impl EcCurve {
                     Err("scalar is not a quadratic residue")
                 }
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let scalar = curve.parse_scalars::<1>(&mut cursor)?;
                 let result = scalar[0].sqrt();
@@ -1077,7 +1065,6 @@ impl EcCurve {
                     Err("scalar is not a quadratic residue")
                 }
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -1103,13 +1090,13 @@ impl EcCurve {
                 let result = scalars[0].ct_eq(&scalars[1]);
                 Ok(vec![result.unwrap_u8()])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let scalars = curve.parse_scalars::<2>(&mut cursor)?;
                 let result = scalars[0].ct_eq(&scalars[1]);
                 Ok(vec![result.unwrap_u8()])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let scalars = curve.parse_scalars::<2>(&mut cursor)?;
                 let result = scalars[0].ct_eq(&scalars[1]);
@@ -1145,7 +1132,6 @@ impl EcCurve {
                 let result = scalars[0].ct_eq(&scalars[1]);
                 Ok(vec![result.unwrap_u8()])
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -1171,13 +1157,13 @@ impl EcCurve {
                 let result = scalar[0].is_zero();
                 Ok(vec![result.unwrap_u8()])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let scalar = curve.parse_scalars::<1>(&mut cursor)?;
                 let result = scalar[0].is_zero();
                 Ok(vec![result.unwrap_u8()])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let scalar = curve.parse_scalars::<1>(&mut cursor)?;
                 let result = scalar[0].is_zero();
@@ -1213,7 +1199,6 @@ impl EcCurve {
                 let result = scalar[0].is_zero();
                 Ok(vec![result.unwrap_u8()])
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -1236,12 +1221,12 @@ impl EcCurve {
                 let _ = curve.parse_scalars::<1>(&mut cursor)?;
                 Ok(vec![1])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 let _ = curve.parse_scalars::<1>(&mut cursor)?;
                 Ok(vec![1])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 let _ = curve.parse_scalars::<1>(&mut cursor)?;
                 Ok(vec![1])
@@ -1271,7 +1256,6 @@ impl EcCurve {
                 let _ = curve.parse_scalars::<1>(&mut cursor)?;
                 Ok(vec![1])
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -1309,7 +1293,7 @@ impl EcCurve {
                     <k256::Scalar as elliptic_curve::ops::Reduce<U512>>::reduce_bytes(&repr);
                 Ok(scalar.to_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(_) | Self::Ristretto25519(_) => {
                 if data.len() < 64 {
                     return Err("invalid operation length. Must be at least 64 bytes");
@@ -1346,7 +1330,6 @@ impl EcCurve {
                     blsful::inner_types::Scalar::from_bytes_wide((&data[..64]).try_into().unwrap());
                 Ok(scalar.to_be_bytes().to_vec())
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -1383,7 +1366,7 @@ impl EcCurve {
                 .expect("failed to hash to scalar");
                 Ok(scalar.to_bytes().to_vec())
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(_) | Self::Ristretto25519(_) => {
                 let scalar = curve25519_dalek_ml::Scalar::hash_from_bytes::<sha2::Sha512>(value);
                 Ok(scalar.to_bytes().to_vec())
@@ -1409,7 +1392,6 @@ impl EcCurve {
                 >(value, b"BLS12381_XMD:SHA-256_RO_");
                 Ok(scalar.to_be_bytes().to_vec())
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -1566,7 +1548,7 @@ impl EcCurve {
                     (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
                 ])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 cursor.set_position(cursor.position() + 32);
                 let msg = &data[position..position + 32];
@@ -1602,7 +1584,7 @@ impl EcCurve {
                 .compress();
                 Ok(vec![big_r.ct_eq(&r.compress()).unwrap_u8()])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 cursor.set_position(cursor.position() + 32);
                 let msg = &data[position..position + 32];
@@ -1792,7 +1774,6 @@ impl EcCurve {
                 let big_r = blsful::inner_types::Gt::generator() * s - points[0] * e;
                 Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 
@@ -1898,7 +1879,7 @@ impl EcCurve {
                     (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
                 ])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ed25519(curve) => {
                 cursor.set_position(cursor.position() + 32);
                 let msg = &data[position..position + 32];
@@ -1932,7 +1913,7 @@ impl EcCurve {
                 .compress();
                 Ok(vec![big_r.ct_eq(&r.compress()).unwrap_u8()])
             }
-            #[cfg(feature = "curve25519_dalek_ml")]
+            #[cfg(feature = "curve25519")]
             Self::Ristretto25519(curve) => {
                 cursor.set_position(cursor.position() + 32);
                 let msg = &data[position..position + 32];
@@ -2120,7 +2101,6 @@ impl EcCurve {
                 let big_r = blsful::inner_types::Gt::generator() * s + points[0] * e;
                 Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
             }
-            _ => Err("operation is not supported for this curve"),
         }
     }
 

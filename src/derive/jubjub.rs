@@ -50,7 +50,7 @@ mod test {
     use crate::HDDerivable;
 
     #[test]
-    fn pippinger_k256_known() {
+    fn pippinger() {
         use rand_core::SeedableRng;
         let mut rng = rand_chacha::ChaChaRng::from_rng(rand_core::OsRng).unwrap();
 

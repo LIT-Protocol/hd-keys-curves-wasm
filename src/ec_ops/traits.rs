@@ -173,7 +173,7 @@ impl EcParser for p384::NistP384 {
     }
 }
 
-#[cfg(feature = "curve25519_dalek_ml")]
+#[cfg(feature = "curve25519")]
 impl EcParser for Ed25519 {
     type Point = curve25519_dalek_ml::EdwardsPoint;
     type Scalar = curve25519_dalek_ml::Scalar;
@@ -213,7 +213,7 @@ impl EcParser for Ed25519 {
     }
 }
 
-#[cfg(feature = "curve25519_dalek_ml")]
+#[cfg(feature = "curve25519")]
 impl EcParser for Ristretto25519 {
     type Point = curve25519_dalek_ml::RistrettoPoint;
     type Scalar = curve25519_dalek_ml::Scalar;
@@ -451,10 +451,10 @@ impl EcParser for Bls12381Gt {
     }
 }
 
-#[cfg(feature = "curve25519_dalek_ml")]
+#[cfg(feature = "curve25519")]
 #[derive(Copy, Clone, Debug)]
 pub struct Ed25519;
-#[cfg(feature = "curve25519_dalek_ml")]
+#[cfg(feature = "curve25519")]
 #[derive(Copy, Clone, Debug)]
 pub struct Ristretto25519;
 #[cfg(feature = "ed448")]
