@@ -7,12 +7,12 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-curve25519_dalek_ml = ["dep:curve25519-dalek-ml"]
-ed448 = ["dep:ed448-goldilocks-plus"]
-k256 = ["dep:k256"]
-p256 = ["dep:p256"]
-p384 = ["dep:p384"]
-bls = ["dep:blsful"]
+curve25519_dalek_ml = ["dep:curve25519-dalek-ml", "dep:sha2"]
+ed448 = ["dep:ed448-goldilocks-plus", "dep:sha3"]
+k256 = ["dep:k256", "dep:sha2"]
+p256 = ["dep:p256", "dep:sha2"]
+p384 = ["dep:p384", "dep:sha2"]
+bls = ["dep:blsful", "dep:sha2"]
 jubjub = ["dep:jubjub", "dep:blake2"]
 
 [dependencies]
@@ -27,8 +27,8 @@ jubjub = { version = "0.10", default-features = false, git = "https://github.com
 k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
 p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
 p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
-sha2 = { version = "0.10", default-features = false }
-sha3 = { version = "0.10", default-features = false }
+sha2 = { version = "0.10", default-features = false, optional = true }
+sha3 = { version = "0.10", default-features = false, optional = true }
 subtle = "2.5"
 wasm-bindgen = "0.2.92"
 
