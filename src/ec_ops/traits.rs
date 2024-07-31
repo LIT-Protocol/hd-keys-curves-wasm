@@ -1,8 +1,7 @@
-use digest::generic_array::GenericArray;
-use digest::typenum;
-use elliptic_curve::group::GroupEncoding;
-use elliptic_curve::sec1::{EncodedPoint, FromEncodedPoint};
-use elliptic_curve::{Field, PrimeField};
+use elliptic_curve::{
+    sec1::{EncodedPoint, FromEncodedPoint},
+    PrimeField,
+};
 use std::io::{Cursor, Read};
 
 pub trait EcParser {
@@ -182,6 +181,8 @@ impl EcParser for Ed25519 {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
+        use elliptic_curve::group::GroupEncoding;
+
         let mut points = [curve25519_dalek_ml::EdwardsPoint::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
@@ -222,6 +223,8 @@ impl EcParser for Ristretto25519 {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
+        use elliptic_curve::group::GroupEncoding;
+
         let mut points = [curve25519_dalek_ml::RistrettoPoint::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
@@ -262,6 +265,11 @@ impl EcParser for Ed448 {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
+        use elliptic_curve::{
+            generic_array::{typenum, GenericArray},
+            group::GroupEncoding,
+        };
+
         let mut points = [ed448_goldilocks_plus::EdwardsPoint::default(); N];
         let mut bytes = GenericArray::<u8, typenum::U57>::default();
         for point in points.iter_mut() {
@@ -302,6 +310,8 @@ impl EcParser for JubJub {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
+        use elliptic_curve::group::GroupEncoding;
+
         let mut points = [jubjub::SubgroupPoint::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
@@ -318,6 +328,8 @@ impl EcParser for JubJub {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Scalar; N], &'static str> {
+        use elliptic_curve::Field;
+
         let mut scalars = [jubjub::Scalar::ZERO; N];
         let mut repr = [0u8; 32];
         for scalar in scalars.iter_mut() {

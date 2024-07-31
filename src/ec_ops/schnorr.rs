@@ -1,14 +1,4 @@
-#[cfg(any(
-    feature = "sha2",
-    feature = "sha3",
-    feature = "blake2",
-    feature = "curve25519",
-    feature = "k256",
-    feature = "p256",
-    feature = "p384",
-    feature = "jubjub",
-    feature = "bls",
-    feature = "ed448"))]
+#[cfg(any(feature = "sha2", feature = "sha3", feature = "blake2"))]
 use super::consts::*;
 use core::marker::PhantomData;
 use digest::{Digest, ExtendableOutput, Update};
