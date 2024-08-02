@@ -1827,7 +1827,8 @@ impl EcCurve {
                 Ok(vec![self
                     .verify_ecdsa(&points[0], &scalars[0], &signature)?
                     .unwrap_u8()])
-            } // _ => Err("operation is not supported for this curve"),
+            }
+            _ => Err("operation is not supported for this curve"),
         }
     }
 
