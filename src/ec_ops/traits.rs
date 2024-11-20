@@ -343,6 +343,46 @@ impl EcParser for JubJub {
     }
 }
 
+#[cfg(feature = "decaf377")]
+impl EcParser for Decaf377 {
+    type Point = decaf377::Element;
+    type Scalar = decaf377::Fr;
+
+    fn parse_points<const N: usize>(
+        &self,
+        reader: &mut Cursor<&[u8]>,
+    ) -> Result<[Self::Point; N], &'static str> {
+        use elliptic_curve::group::GroupEncoding;
+
+        let mut points = [decaf377::Element::default(); N];
+        let mut bytes = [0u8; 32];
+        for point in points.iter_mut() {
+            reader.read_exact(&mut bytes).map_err(|_| {
+                "tried to read 32 bytes for decaf377 points but reached end of stream"
+            })?;
+            *point = Option::from(decaf377::Element::from_bytes(&bytes))
+                .ok_or("invalid decaf377 point")?;
+        }
+        Ok(points)
+    }
+
+    fn parse_scalars<const N: usize>(
+        &self,
+        reader: &mut Cursor<&[u8]>,
+    ) -> Result<[Self::Scalar; N], &'static str> {
+        let mut scalars = [decaf377::Fr::ZERO; N];
+        let mut repr = [0u8; 32];
+        for scalar in scalars.iter_mut() {
+            reader
+                .read_exact(&mut repr)
+                .map_err(|_| "Failed to read enough bytes for the scalar")?;
+            *scalar =
+                decaf377::Fr::from_bytes_checked(&repr).map_err(|_| "Invalid scalar bytes")?;
+        }
+        Ok(scalars)
+    }
+}
+
 #[cfg(feature = "bls")]
 impl EcParser for blsful::inner_types::Bls12381G1 {
     type Point = blsful::inner_types::G1Projective;
@@ -475,6 +515,9 @@ pub struct Ed448;
 #[cfg(feature = "jubjub")]
 #[derive(Copy, Clone, Debug)]
 pub struct JubJub;
+#[cfg(feature = "decaf377")]
+#[derive(Copy, Clone, Debug)]
+pub struct Decaf377;
 #[cfg(feature = "bls")]
 #[derive(Copy, Clone, Debug)]
 pub struct Bls12381Gt;

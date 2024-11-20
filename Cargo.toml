@@ -10,37 +10,41 @@ license = "Apache-2.0 OR MIT"
 name = "hd-keys-curves-wasm"
 readme = "README.md"
 repository = "https://github.com/LIT-Protocol/hd-keys-curves-wasm"
-version = "1.0.1"
+version = "1.0.2"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["k256"]
-curve25519 = ["dep:curve25519-dalek-ml", "dep:sha2"]
-ed448 = ["dep:ed448-goldilocks-plus", "dep:sha3"]
-k256 = ["dep:k256", "dep:sha2"]
-p256 = ["dep:p256", "dep:sha2"]
-p384 = ["dep:p384", "dep:sha2"]
-bls = ["dep:blsful", "dep:sha2"]
-jubjub = ["dep:jubjub", "dep:blake2"]
+curve25519 = ["dep:curve25519-dalek-ml", "sha2"]
+ed448 = ["dep:ed448-goldilocks-plus", "sha3"]
+k256 = ["dep:k256", "sha2"]
+p256 = ["dep:p256", "sha2"]
+p384 = ["dep:p384", "sha2"]
+bls = ["dep:blsful", "sha2"]
+jubjub = ["dep:jubjub", "blake2"]
+decaf377 = ["dep:decaf377", "blake2"]
+sha3 = ["dep:sha3"]
+sha2 = ["dep:sha2"]
+blake2 = ["dep:blake2"]
 
 [dependencies]
 blake2 = { version = "0.10", default-features = false, optional = true }
 blsful = { version = "2.5.7", default-features = false, features = ["rust"], optional = true }
-curve25519-dalek-ml = { version = "4.2.1" , default-features = false, features = ["digest", "group"], optional = true }
+curve25519-dalek-ml = { version = "4.2" , default-features = false, features = ["digest", "group"], optional = true }
 ecdsa = { version = "0.16", features = ["arithmetic"] }
-ed448-goldilocks-plus = { version = "0.11.2", optional = true }
+ed448-goldilocks-plus = { version = "0.13", optional = true }
 elliptic-curve = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"] }
-digest = { version = "0.10.7", default-features = false, features = ["alloc"] }
-jubjub = { version = "0.10", default-features = false, git = "https://github.com/LIT-Protocol/jubjub.git", package = "jubjub-plus", optional = true }
+digest = { version = "0.10", default-features = false, features = ["alloc"] }
+jubjub = { version = "0.10", default-features = false, package = "jubjub-plus", optional = true }
+decaf377 = { version = "0.10", git = "https://github.com/LIT-Protocol/decaf377.git", optional = true }
 k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
 p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
 p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
 sha2 = { version = "0.10", default-features = false, optional = true }
 sha3 = { version = "0.10", default-features = false, optional = true }
 subtle = "2.5"
-wasm-bindgen = "0.2.92"
 
 [target.'cfg(target_pointer_width = "32")'.dependencies]
 getrandom = { version = "0.2.14", features = ["js"] }

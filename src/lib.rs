@@ -12,5 +12,6 @@ pub use ec_ops::*;
     feature = "bls",
     feature = "ed448",
     feature = "jubjub",
+    feature = "decaf377"
 )))]
 compile_error!("At least one feature curve must be enabled");
