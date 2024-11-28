@@ -18,10 +18,10 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["k256"]
 curve25519 = ["dep:curve25519-dalek-ml", "sha2"]
-ed448 = ["dep:ed448-goldilocks-plus", "sha3"]
+ed448 = ["dep:ed448-goldilocks-plus", "sha3", "elliptic-curve-tools"]
 k256 = ["dep:k256", "sha2"]
 p256 = ["dep:p256", "sha2"]
-p384 = ["dep:p384", "sha2"]
+p384 = ["dep:p384", "sha2", "elliptic-curve-tools"]
 bls = ["dep:blsful", "sha2"]
 jubjub = ["dep:jubjub", "blake2"]
 decaf377 = ["dep:decaf377", "blake2"]
@@ -36,12 +36,13 @@ curve25519-dalek-ml = { version = "4.2" , default-features = false, features = [
 ecdsa = { version = "0.16", features = ["arithmetic"] }
 ed448-goldilocks-plus = { version = "0.13", optional = true }
 elliptic-curve = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"] }
+elliptic-curve-tools = { version = "0.1", optional = true }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 jubjub = { version = "0.10", default-features = false, package = "jubjub-plus", optional = true }
 decaf377 = { version = "0.10", git = "https://github.com/LIT-Protocol/decaf377.git", optional = true }
-k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
-p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
-p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field"], optional = true }
+k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
+p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
+p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
 sha2 = { version = "0.10", default-features = false, optional = true }
 sha3 = { version = "0.10", default-features = false, optional = true }
 subtle = "2.5"

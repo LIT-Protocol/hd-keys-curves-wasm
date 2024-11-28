@@ -1,7 +1,7 @@
-use elliptic_curve::hash2curve::ExpandMsgXof;
-
 use crate::derive::{HDDerivableScalar, HDDeriver};
 use crate::HDDerivable;
+use elliptic_curve::hash2curve::ExpandMsgXof;
+use elliptic_curve_tools::SumOfProducts;
 
 use super::sum_of_products_pippenger;
 
@@ -29,6 +29,11 @@ impl HDDerivableScalar<7> for ed448_goldilocks_plus::Scalar {
 
 impl HDDerivable for ed448_goldilocks_plus::EdwardsPoint {
     fn sum_of_products(points: &[Self], scalars: &[Self::Scalar]) -> Self {
-        sum_of_products_pippenger::<ed448_goldilocks_plus::Scalar, Self, 7>(points, scalars)
+        let data = scalars
+            .iter()
+            .zip(points.iter())
+            .map(|(&s, &p)| (s, p))
+            .collect::<Vec<_>>();
+        <Self as SumOfProducts>::sum_of_products(data.as_slice())
     }
 }
