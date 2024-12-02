@@ -1,9 +1,7 @@
-use elliptic_curve::hash2curve::ExpandMsgXmd;
-
 use crate::derive::{HDDerivableScalar, HDDeriver};
 use crate::HDDerivable;
-
-use super::sum_of_products_pippenger;
+use elliptic_curve::hash2curve::ExpandMsgXmd;
+use elliptic_curve_tools::SumOfProducts;
 
 impl HDDeriver for jubjub::Scalar {
     fn create(msg: &[u8], dst: &[u8]) -> Self {
@@ -33,13 +31,23 @@ impl HDDerivableScalar<4> for jubjub::Scalar {
 
 impl HDDerivable for jubjub::ExtendedPoint {
     fn sum_of_products(points: &[Self], scalars: &[Self::Scalar]) -> Self {
-        sum_of_products_pippenger::<jubjub::Scalar, Self, 4>(points, scalars)
+        let data = scalars
+            .iter()
+            .zip(points.iter())
+            .map(|(&s, &p)| (s, p))
+            .collect::<Vec<_>>();
+        <Self as SumOfProducts>::sum_of_products(data.as_slice())
     }
 }
 
 impl HDDerivable for jubjub::SubgroupPoint {
     fn sum_of_products(points: &[Self], scalars: &[Self::Scalar]) -> Self {
-        sum_of_products_pippenger::<jubjub::Scalar, Self, 4>(points, scalars)
+        let data = scalars
+            .iter()
+            .zip(points.iter())
+            .map(|(&s, &p)| (s, p))
+            .collect::<Vec<_>>();
+        <Self as SumOfProducts>::sum_of_products(data.as_slice())
     }
 }
 

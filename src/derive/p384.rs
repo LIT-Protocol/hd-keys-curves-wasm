@@ -1,10 +1,9 @@
 use crate::derive::{HDDerivableScalar, HDDeriver};
 use crate::HDDerivable;
 use elliptic_curve::hash2curve::{ExpandMsgXmd, GroupDigest};
-use elliptic_curve::Group;
 use elliptic_curve_tools::SumOfProducts;
 
-use super::{scalar_primitive_to_limbs, sum_of_products_pippenger};
+use super::scalar_primitive_to_limbs;
 
 impl HDDeriver for p384::Scalar {
     fn create(msg: &[u8], dst: &[u8]) -> Self {
@@ -34,7 +33,7 @@ impl HDDerivable for p384::ProjectivePoint {
 
 #[cfg(test)]
 mod test {
-    use elliptic_curve::{Field, Group};
+    use elliptic_curve::Field;
     use p384::{ProjectivePoint, Scalar};
 
     use crate::HDDerivable;

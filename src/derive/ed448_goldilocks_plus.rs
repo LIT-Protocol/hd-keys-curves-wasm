@@ -3,8 +3,6 @@ use crate::HDDerivable;
 use elliptic_curve::hash2curve::ExpandMsgXof;
 use elliptic_curve_tools::SumOfProducts;
 
-use super::sum_of_products_pippenger;
-
 impl HDDeriver for ed448_goldilocks_plus::Scalar {
     fn create(msg: &[u8], dst: &[u8]) -> Self {
         ed448_goldilocks_plus::Scalar::hash::<ExpandMsgXof<sha3::Shake256>>(msg, dst)

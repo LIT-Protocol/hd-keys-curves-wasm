@@ -1,10 +1,8 @@
-use decaf377::{Element as ProjectivePoint, Fr as Scalar};
-use elliptic_curve::hash2curve::{ExpandMsg, ExpandMsgXmd, Expander};
-
 use crate::derive::{HDDerivableScalar, HDDeriver};
 use crate::HDDerivable;
-
-use super::sum_of_products_pippenger;
+use decaf377::{Element as ProjectivePoint, Fr as Scalar};
+use elliptic_curve::hash2curve::{ExpandMsg, ExpandMsgXmd, Expander};
+use elliptic_curve_tools::SumOfProducts;
 
 impl HDDeriver for Scalar {
     fn create(msg: &[u8], dst: &[u8]) -> Self {
@@ -31,14 +29,19 @@ impl HDDerivableScalar<4> for Scalar {
 
 impl HDDerivable for ProjectivePoint {
     fn sum_of_products(points: &[Self], scalars: &[Self::Scalar]) -> Self {
-        sum_of_products_pippenger::<Scalar, Self, 4>(points, scalars)
+        let data = scalars
+            .iter()
+            .zip(points.iter())
+            .map(|(&s, &p)| (s, p))
+            .collect::<Vec<_>>();
+        <Self as SumOfProducts>::sum_of_products(data.as_slice())
     }
 }
 
 #[cfg(test)]
 mod test {
     use decaf377::{Element as ProjectivePoint, Fr as Scalar};
-    use elliptic_curve::{Field, Group};
+    use elliptic_curve::Field;
 
     use crate::HDDerivable;
 

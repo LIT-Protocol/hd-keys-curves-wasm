@@ -1,9 +1,7 @@
-use elliptic_curve::hash2curve::{ExpandMsg, ExpandMsgXmd, Expander};
-
 use crate::derive::{HDDerivableScalar, HDDeriver};
 use crate::HDDerivable;
-
-use super::sum_of_products_pippenger;
+use elliptic_curve::hash2curve::{ExpandMsg, ExpandMsgXmd, Expander};
+use elliptic_curve_tools::SumOfProducts;
 
 impl HDDeriver for curve25519_dalek_ml::Scalar {
     fn create(msg: &[u8], dst: &[u8]) -> Self {
@@ -39,12 +37,22 @@ impl HDDerivableScalar<4> for curve25519_dalek_ml::Scalar {
 
 impl HDDerivable for curve25519_dalek_ml::EdwardsPoint {
     fn sum_of_products(points: &[Self], scalars: &[Self::Scalar]) -> Self {
-        sum_of_products_pippenger::<curve25519_dalek_ml::Scalar, Self, 4>(points, scalars)
+        let data = scalars
+            .iter()
+            .zip(points.iter())
+            .map(|(&s, &p)| (s, p))
+            .collect::<Vec<_>>();
+        <Self as SumOfProducts>::sum_of_products(data.as_slice())
     }
 }
 
 impl HDDerivable for curve25519_dalek_ml::RistrettoPoint {
     fn sum_of_products(points: &[Self], scalars: &[Self::Scalar]) -> Self {
-        sum_of_products_pippenger::<curve25519_dalek_ml::Scalar, Self, 4>(points, scalars)
+        let data = scalars
+            .iter()
+            .zip(points.iter())
+            .map(|(&s, &p)| (s, p))
+            .collect::<Vec<_>>();
+        <Self as SumOfProducts>::sum_of_products(data.as_slice())
     }
 }
