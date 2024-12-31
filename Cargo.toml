@@ -10,14 +10,14 @@ license = "Apache-2.0 OR MIT"
 name = "hd-keys-curves-wasm"
 readme = "README.md"
 repository = "https://github.com/LIT-Protocol/hd-keys-curves-wasm"
-version = "1.0.2"
+version = "1.0.3"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["k256"]
-curve25519 = ["dep:curve25519-dalek-ml", "sha2", "elliptic-curve-tools"]
+curve25519 = ["dep:curve25519-dalek-ml", "dep:vsss-rs", "sha2", "elliptic-curve-tools"]
 ed448 = ["dep:ed448-goldilocks-plus", "sha3", "elliptic-curve-tools"]
 k256 = ["dep:k256", "sha2"]
 p256 = ["dep:p256", "sha2"]
@@ -45,7 +45,8 @@ p256 = { version = "0.13", default-features = false, features = ["arithmetic", "
 p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
 sha2 = { version = "0.10", default-features = false, optional = true }
 sha3 = { version = "0.10", default-features = false, optional = true }
-subtle = "2.5"
+subtle = "2.6"
+vsss-rs = { version = "5.0.0", features = ["curve25519"], optional = true }
 
 [target.'cfg(target_pointer_width = "32")'.dependencies]
 getrandom = { version = "0.2.14", features = ["js"] }
