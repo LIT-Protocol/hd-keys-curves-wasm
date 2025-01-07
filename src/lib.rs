@@ -1,7 +1,9 @@
 mod derive;
+#[cfg(feature = "ecops")]
 mod ec_ops;
 
 pub use derive::*;
+#[cfg(feature = "ecops")]
 pub use ec_ops::*;
 
 #[cfg(not(any(
