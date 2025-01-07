@@ -32,9 +32,9 @@ pub enum EcCurve {
     #[cfg(feature = "jubjub")]
     JubJub(super::JubJub),
     #[cfg(feature = "bls")]
-    Bls12381G1(blsful::inner_types::Bls12381G1),
+    Bls12381G1(blsful::inner_types::InnerBls12381G1),
     #[cfg(feature = "bls")]
-    Bls12381G2(blsful::inner_types::Bls12381G2),
+    Bls12381G2(blsful::inner_types::InnerBls12381G2),
     #[cfg(feature = "bls")]
     Bls12381Gt(super::Bls12381Gt),
     #[cfg(feature = "decaf377")]
@@ -63,9 +63,9 @@ impl TryFrom<&[u8]> for EcCurve {
             #[cfg(feature = "decaf377")]
             consts::CURVE_NAME_DECAF377 => Ok(Self::Decaf377(super::Decaf377)),
             #[cfg(feature = "bls")]
-            consts::CURVE_NAME_BLS12381G1 => Ok(Self::Bls12381G1(blsful::inner_types::Bls12381G1)),
+            consts::CURVE_NAME_BLS12381G1 => Ok(Self::Bls12381G1(blsful::inner_types::InnerBls12381G1)),
             #[cfg(feature = "bls")]
-            consts::CURVE_NAME_BLS12381G2 => Ok(Self::Bls12381G2(blsful::inner_types::Bls12381G2)),
+            consts::CURVE_NAME_BLS12381G2 => Ok(Self::Bls12381G2(blsful::inner_types::InnerBls12381G2)),
             #[cfg(feature = "bls")]
             consts::CURVE_NAME_BLS12381GT => Ok(Self::Bls12381Gt(super::Bls12381Gt)),
             _ => Err("invalid value for EcCurve"),
@@ -899,9 +899,9 @@ impl EcCurve {
         match self {
             Self::Bls12381G1(_) | Self::Bls12381G2(_) | Self::Bls12381Gt(_) => {
                 let g1_points =
-                    blsful::inner_types::Bls12381G1.parse_points_vec(&mut cursor, lengths[0])?;
+                    blsful::inner_types::InnerBls12381G1.parse_points_vec(&mut cursor, lengths[0])?;
                 let g2_points =
-                    blsful::inner_types::Bls12381G2.parse_points_vec(&mut cursor, lengths[0])?;
+                    blsful::inner_types::InnerBls12381G2.parse_points_vec(&mut cursor, lengths[0])?;
                 let points = g1_points
                     .into_iter()
                     .zip(g2_points)
@@ -2792,8 +2792,8 @@ impl EcCurve {
                 let position = cursor.position() as usize;
                 let msg = &data[position..position + lengths[0]];
                 cursor.set_position(cursor.position() + lengths[0] as u64);
-                let g1_points = blsful::inner_types::Bls12381G1.parse_points::<1>(&mut cursor)?;
-                let g2_points = blsful::inner_types::Bls12381G2.parse_points::<1>(&mut cursor)?;
+                let g1_points = blsful::inner_types::InnerBls12381G1.parse_points::<1>(&mut cursor)?;
+                let g2_points = blsful::inner_types::InnerBls12381G2.parse_points::<1>(&mut cursor)?;
                 let pk = blsful::PublicKey::<blsful::Bls12381G2Impl>(g1_points[0]);
                 let sig =
                     blsful::Signature::<blsful::Bls12381G2Impl>::ProofOfPossession(g2_points[0]);
@@ -2812,8 +2812,8 @@ impl EcCurve {
                 let position = cursor.position() as usize;
                 let msg = &data[position..position + lengths[0]];
                 cursor.set_position(cursor.position() + lengths[0] as u64);
-                let g1_points = blsful::inner_types::Bls12381G2.parse_points::<1>(&mut cursor)?;
-                let g2_points = blsful::inner_types::Bls12381G1.parse_points::<1>(&mut cursor)?;
+                let g1_points = blsful::inner_types::InnerBls12381G2.parse_points::<1>(&mut cursor)?;
+                let g2_points = blsful::inner_types::InnerBls12381G1.parse_points::<1>(&mut cursor)?;
                 let pk = blsful::PublicKey::<blsful::Bls12381G1Impl>(g1_points[0]);
                 let sig =
                     blsful::Signature::<blsful::Bls12381G1Impl>::ProofOfPossession(g2_points[0]);

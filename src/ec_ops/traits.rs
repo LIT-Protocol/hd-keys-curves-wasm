@@ -384,7 +384,7 @@ impl EcParser for Decaf377 {
 }
 
 #[cfg(feature = "bls")]
-impl EcParser for blsful::inner_types::Bls12381G1 {
+impl EcParser for blsful::inner_types::InnerBls12381G1 {
     type Point = blsful::inner_types::G1Projective;
     type Scalar = blsful::inner_types::Scalar;
 
@@ -424,7 +424,7 @@ impl EcParser for blsful::inner_types::Bls12381G1 {
 }
 
 #[cfg(feature = "bls")]
-impl EcParser for blsful::inner_types::Bls12381G2 {
+impl EcParser for blsful::inner_types::InnerBls12381G2 {
     type Point = blsful::inner_types::G2Projective;
     type Scalar = blsful::inner_types::Scalar;
 
