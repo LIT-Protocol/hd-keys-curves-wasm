@@ -31,7 +31,7 @@ pub trait HDDeriver: PrimeField {
             return D::identity();
         }
         if public_keys.len() == 1 {
-            return public_keys[0] * *self;
+            return public_keys[0];
         }
         let powers = get_poly_powers(*self, public_keys.len());
         D::sum_of_products(public_keys, powers.as_slice())
