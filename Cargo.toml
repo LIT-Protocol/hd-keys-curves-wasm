@@ -40,7 +40,7 @@ elliptic-curve = { version = "0.13", default-features = false, features = ["arit
 elliptic-curve-tools = { version = "0.1", optional = true }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 jubjub = { version = "0.10", default-features = false, features = ["bits"], package = "jubjub-plus", optional = true }
-decaf377 = { version = "0.10", git = "https://github.com/LIT-Protocol/decaf377.git", optional = true }
+decaf377 = { git = "https://github.com/LIT-Protocol/decaf377.git", rev = "2dfedd29932fe810ad3bcd0b8030e5f4d2d64e8d", optional = true }
 k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
 p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
 p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
