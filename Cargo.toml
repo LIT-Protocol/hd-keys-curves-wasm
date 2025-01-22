@@ -40,14 +40,14 @@ elliptic-curve = { version = "0.13", default-features = false, features = ["arit
 elliptic-curve-tools = { version = "0.1", optional = true }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 jubjub = { version = "0.10", default-features = false, features = ["bits"], package = "jubjub-plus", optional = true }
-decaf377 = { git = "https://github.com/LIT-Protocol/decaf377.git", rev = "2dfedd29932fe810ad3bcd0b8030e5f4d2d64e8d", optional = true }
+decaf377 = { git = "https://github.com/LIT-Protocol/decaf377.git", rev = "1c5755b2b90e1969d47ce89cf2d35078984a0ee5", optional = true }
 k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
 p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
 p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
 sha2 = { version = "0.10", default-features = false, optional = true }
 sha3 = { version = "0.10", default-features = false, optional = true }
 subtle = "2.6"
-vsss-rs = { version = "5.0.0", features = ["curve25519"], optional = true }
+vsss-rs = { version = "5.1.0", features = ["curve25519"], optional = true }
 
 [target.'cfg(target_pointer_width = "32")'.dependencies]
 getrandom = { version = "0.2.14", features = ["js"] }
