@@ -33,9 +33,9 @@ blake2 = ["dep:blake2"]
 [dependencies]
 blake2 = { version = "0.10", default-features = false, optional = true }
 blsful = { version = "3.0.0-pre8", default-features = false, features = ["rust"], optional = true }
-curve25519-dalek-ml = { version = "4.2" , default-features = false, features = ["digest", "group", "group-bits", "zeroize"], optional = true }
+curve25519-dalek-ml = { version = "4.3" , default-features = false, features = ["digest", "group", "group-bits", "zeroize"], optional = true }
 ecdsa = { version = "0.16", features = ["arithmetic"] }
-ed448-goldilocks-plus = { version = "0.13", optional = true }
+ed448-goldilocks-plus = { version = "0.15", optional = true }
 elliptic-curve = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve"] }
 elliptic-curve-tools = { version = "0.1", optional = true }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
