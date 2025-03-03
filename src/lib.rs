@@ -16,7 +16,7 @@ pub extern crate p384;
 pub extern crate k256;
 
 #[cfg(feature = "curve25519")]
-pub use vsss_rs::curve25519;
+pub use vsss_rs::{curve25519, curve25519_dalek};
 
 #[cfg(feature = "bls")]
 pub extern crate blsful;
