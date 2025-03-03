@@ -6,6 +6,8 @@ pub use derive::*;
 #[cfg(feature = "ecops")]
 pub use ec_ops::*;
 
+pub use elliptic_curve;
+
 #[cfg(feature = "p256")]
 pub extern crate p256;
 
@@ -29,7 +31,6 @@ pub extern crate jubjub;
 
 #[cfg(feature = "decaf377")]
 pub extern crate decaf377;
-
 
 #[cfg(not(any(
     feature = "p256",
