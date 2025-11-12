@@ -16,6 +16,8 @@ pub mod k256;
 pub mod p256;
 #[cfg(feature = "p384")]
 pub mod p384;
+#[cfg(feature = "pasta")]
+pub mod pasta;
 
 pub trait HDDeriver: PrimeField {
     fn create(msg: &[u8], dst: &[u8]) -> Self;

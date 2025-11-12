@@ -32,6 +32,9 @@ pub extern crate jubjub;
 #[cfg(feature = "decaf377")]
 pub extern crate decaf377;
 
+#[cfg(feature = "pasta")]
+pub extern crate pasta_curves as pasta;
+
 #[cfg(not(any(
     feature = "p256",
     feature = "p384",
@@ -40,6 +43,7 @@ pub extern crate decaf377;
     feature = "bls",
     feature = "ed448",
     feature = "jubjub",
-    feature = "decaf377"
+    feature = "decaf377",
+    feature = "pasta"
 )))]
 compile_error!("At least one feature curve must be enabled");

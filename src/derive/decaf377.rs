@@ -1,5 +1,5 @@
-use crate::derive::{HDDerivableScalar, HDDeriver};
 use crate::HDDerivable;
+use crate::derive::{HDDerivableScalar, HDDeriver};
 use decaf377::{Element as ProjectivePoint, Fr as Scalar};
 use elliptic_curve::hash2curve::{ExpandMsg, ExpandMsgXmd, Expander};
 use elliptic_curve_tools::SumOfProducts;

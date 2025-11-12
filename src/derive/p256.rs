@@ -1,7 +1,7 @@
 use elliptic_curve::hash2curve::{ExpandMsgXmd, GroupDigest};
 
-use crate::derive::{HDDerivableScalar, HDDeriver};
 use crate::HDDerivable;
+use crate::derive::{HDDerivableScalar, HDDeriver};
 
 use super::{scalar_primitive_to_limbs, sum_of_products_pippenger};
 

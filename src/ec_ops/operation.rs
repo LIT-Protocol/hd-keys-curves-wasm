@@ -3,17 +3,42 @@ use crate::schnorr::parse_hash;
 use crate::{EcParser, HDDerivable};
 #[cfg(feature = "bls")]
 use blsful::inner_types::G2Prepared;
+#[cfg(feature = "pasta")]
+use elliptic_curve::PrimeField;
 use elliptic_curve::{
+    CurveArithmetic, Field, Group, PrimeCurve,
     bigint::U256,
     group::{Curve, GroupEncoding},
     hash2curve::GroupDigest,
     ops::{Invert, Reduce},
     point::AffineCoordinates,
     sec1::ToEncodedPoint,
-    CurveArithmetic, Field, Group, PrimeCurve,
 };
 use std::io::{Cursor, Read};
 use subtle::{Choice, ConstantTimeEq};
+
+#[cfg(feature = "jubjub")]
+fn redjubjub_generator() -> jubjub::SubgroupPoint {
+    use elliptic_curve::group::cofactor::CofactorGroup;
+    const SPENDAUTHSIG_BASEPOINT_BYTES: [u8; 32] = [
+        48, 181, 242, 170, 173, 50, 86, 48, 188, 221, 219, 206, 77, 103, 101, 109, 5, 253, 28, 194,
+        208, 55, 187, 83, 117, 182, 233, 109, 158, 1, 161, 215,
+    ];
+    let pt: jubjub::ExtendedPoint = jubjub::AffinePoint::from_bytes(&SPENDAUTHSIG_BASEPOINT_BYTES)
+        .unwrap()
+        .into();
+    pt.into_subgroup().unwrap()
+}
+#[cfg(feature = "pasta")]
+fn redpallas_generator() -> pasta_curves::pallas::Point {
+    const SPENDAUTHSIG_BASEPOINT_BYTES: [u8; 32] = [
+        99, 201, 117, 184, 132, 114, 26, 141, 12, 161, 112, 123, 227, 12, 127, 12, 95, 68, 95, 62,
+        124, 24, 141, 59, 6, 214, 241, 40, 179, 35, 85, 183,
+    ];
+    pasta_curves::pallas::Affine::from_bytes(&(SPENDAUTHSIG_BASEPOINT_BYTES.into()))
+        .unwrap()
+        .into()
+}
 
 #[derive(Copy, Clone, Debug)]
 pub enum EcCurve {
@@ -39,6 +64,8 @@ pub enum EcCurve {
     Bls12381Gt(super::Bls12381Gt),
     #[cfg(feature = "decaf377")]
     Decaf377(super::Decaf377),
+    #[cfg(feature = "pasta")]
+    Pallas(pasta_curves::pallas::Pallas),
 }
 
 impl TryFrom<&[u8]> for EcCurve {
@@ -72,6 +99,8 @@ impl TryFrom<&[u8]> for EcCurve {
             }
             #[cfg(feature = "bls")]
             consts::CURVE_NAME_BLS12381GT => Ok(Self::Bls12381Gt(super::Bls12381Gt)),
+            #[cfg(feature = "pasta")]
+            consts::CURVE_NAME_PALLAS => Ok(Self::Pallas(pasta_curves::pallas::Pallas)),
             _ => Err("invalid value for EcCurve"),
         }
     }
@@ -88,6 +117,7 @@ impl EcCurve {
             feature = "bls",
             feature = "jubjub",
             feature = "decaf377",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -165,6 +195,13 @@ impl EcCurve {
                 }
                 #[cfg(feature = "bls")]
                 Self::Bls12381Gt(curve) => {
+                    let point = curve.parse_points::<1>(&mut cursor)?;
+                    let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                    let result = point[0] * scalar[0];
+                    Ok(result.to_bytes().to_vec())
+                }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
                     let point = curve.parse_points::<1>(&mut cursor)?;
                     let scalar = curve.parse_scalars::<1>(&mut cursor)?;
                     let result = point[0] * scalar[0];
@@ -180,6 +217,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "bls",
             feature = "jubjub",
+            feature = "decaf377",
+            feature = "pasta"
         )))]
         unimplemented!()
     }
@@ -193,6 +232,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "bls",
             feature = "jubjub",
+            feature = "decaf377",
+            feature = "pasta"
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -260,6 +301,12 @@ impl EcCurve {
                 }
                 #[cfg(feature = "bls")]
                 Self::Bls12381Gt(curve) => {
+                    let points = curve.parse_points::<2>(&mut cursor)?;
+                    let result = points[0] + points[1];
+                    Ok(result.to_bytes().to_vec())
+                }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
                     let points = curve.parse_points::<2>(&mut cursor)?;
                     let result = points[0] + points[1];
                     Ok(result.to_bytes().to_vec())
@@ -275,6 +322,7 @@ impl EcCurve {
             feature = "bls",
             feature = "jubjub",
             feature = "decaf377",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -289,6 +337,7 @@ impl EcCurve {
             feature = "bls",
             feature = "jubjub",
             feature = "decaf377",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -359,6 +408,12 @@ impl EcCurve {
                     let result = -points[0];
                     Ok(result.to_bytes().to_vec())
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let points = curve.parse_points::<1>(&mut cursor)?;
+                    let result = -points[0];
+                    Ok(result.to_bytes().to_vec())
+                }
             }
         }
         #[cfg(not(any(
@@ -370,6 +425,7 @@ impl EcCurve {
             feature = "bls",
             feature = "jubjub",
             feature = "decaf377",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -384,6 +440,7 @@ impl EcCurve {
             feature = "bls",
             feature = "jubjub",
             feature = "decaf377",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -455,6 +512,12 @@ impl EcCurve {
                     let result = points[0].ct_eq(&points[1]);
                     Ok(vec![result.unwrap_u8()])
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let points = curve.parse_points::<2>(&mut cursor)?;
+                    let result = points[0].ct_eq(&points[1]);
+                    Ok(vec![result.unwrap_u8()])
+                }
             }
         }
         #[cfg(not(any(
@@ -466,6 +529,7 @@ impl EcCurve {
             feature = "bls",
             feature = "jubjub",
             feature = "decaf377",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -480,6 +544,7 @@ impl EcCurve {
             feature = "bls",
             feature = "jubjub",
             feature = "decaf377",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -550,6 +615,12 @@ impl EcCurve {
                     let result = points[0].is_identity();
                     Ok(vec![result.unwrap_u8()])
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let points = curve.parse_points::<1>(&mut cursor)?;
+                    let result = points[0].is_identity();
+                    Ok(vec![result.unwrap_u8()])
+                }
             }
         }
         #[cfg(not(any(
@@ -561,6 +632,7 @@ impl EcCurve {
             feature = "bls",
             feature = "jubjub",
             feature = "decaf377",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -575,6 +647,7 @@ impl EcCurve {
             feature = "bls",
             feature = "jubjub",
             feature = "decaf377",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -634,6 +707,11 @@ impl EcCurve {
                     let _ = curve.parse_points::<1>(&mut cursor)?;
                     Ok(vec![1])
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let _ = curve.parse_points::<1>(&mut cursor)?;
+                    Ok(vec![1])
+                }
             }
         }
         #[cfg(not(any(
@@ -645,6 +723,7 @@ impl EcCurve {
             feature = "bls",
             feature = "jubjub",
             feature = "decaf377",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -658,6 +737,7 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
+            feature = "pasta",
             feature = "bls"
         ))]
         {
@@ -765,6 +845,16 @@ impl EcCurve {
                         blsful::inner_types::multi_miller_loop(ref_t).final_exponentiation();
                     Ok(result.to_bytes().to_vec())
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(_) => {
+                    use pasta_curves::arithmetic::CurveExt;
+
+                    let hasher = pasta_curves::pallas::Point::hash_to_curve(
+                        "PALLAS_XMD:BLAKE2B-512_SSWU_RO_",
+                    );
+                    let point = hasher(value);
+                    Ok(point.to_bytes().to_vec())
+                }
             }
         }
         #[cfg(not(any(
@@ -775,7 +865,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -789,7 +880,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -854,6 +946,13 @@ impl EcCurve {
                     let result = decaf377::Element::sum_of_products(&points, &scalars);
                     Ok(result.to_bytes().to_vec())
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
+                    let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
+                    let result = pasta_curves::pallas::Point::sum_of_products(&points, &scalars);
+                    Ok(result.to_bytes().to_vec())
+                }
                 #[cfg(feature = "bls")]
                 Self::Bls12381G1(curve) => {
                     let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
@@ -890,7 +989,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -929,7 +1029,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -1001,6 +1102,12 @@ impl EcCurve {
                     let result = scalars[0] + scalars[1];
                     Ok(result.to_be_bytes().to_vec())
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                    let result = scalars[0] + scalars[1];
+                    Ok(result.to_repr().to_vec())
+                }
             }
         }
         #[cfg(not(any(
@@ -1011,7 +1118,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -1025,7 +1133,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -1097,6 +1206,12 @@ impl EcCurve {
                     let result = scalars[0] * scalars[1];
                     Ok(result.to_be_bytes().to_vec())
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                    let result = scalars[0] * scalars[1];
+                    Ok(result.to_repr().to_vec())
+                }
             }
         }
         #[cfg(not(any(
@@ -1107,7 +1222,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -1121,7 +1237,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -1192,6 +1309,12 @@ impl EcCurve {
                     let result = -scalar[0];
                     Ok(result.to_be_bytes().to_vec())
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                    let result = -scalar[0];
+                    Ok(result.to_repr().to_vec())
+                }
             }
         }
         #[cfg(not(any(
@@ -1202,7 +1325,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -1216,7 +1340,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -1285,6 +1410,16 @@ impl EcCurve {
                     let result = scalar[0].invert().expect("scalar is not invertible");
                     Ok(result.to_bytes().to_vec())
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                    if scalar[0].is_zero().into() {
+                        return Ok(scalar[0].to_repr().to_vec());
+                    }
+                    let result = elliptic_curve::ops::Invert::invert(&scalar[0])
+                        .expect("scalar is not invertible");
+                    Ok(result.to_repr().to_vec())
+                }
                 #[cfg(feature = "bls")]
                 Self::Bls12381G1(curve) => {
                     let scalar = curve.parse_scalars::<1>(&mut cursor)?;
@@ -1322,7 +1457,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -1336,7 +1472,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -1422,6 +1559,16 @@ impl EcCurve {
                         Err("scalar is not a quadratic residue")
                     }
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let scalar = curve.parse_scalars::<1>(&mut cursor)?;
+                    let result = scalar[0].sqrt();
+                    if result.is_some().into() {
+                        Ok(result.unwrap().to_repr().to_vec())
+                    } else {
+                        Err("scalar is not a quadratic residue")
+                    }
+                }
                 #[cfg(feature = "bls")]
                 Self::Bls12381G1(curve) => {
                     let scalar = curve.parse_scalars::<1>(&mut cursor)?;
@@ -1462,7 +1609,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -1476,7 +1624,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -1530,6 +1679,12 @@ impl EcCurve {
                     let result = scalars[0].ct_eq(&scalars[1]);
                     Ok(vec![result.unwrap_u8()])
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let scalars = curve.parse_scalars::<2>(&mut cursor)?;
+                    let result = scalars[0].ct_eq(&scalars[1]);
+                    Ok(vec![result.unwrap_u8()])
+                }
                 #[cfg(feature = "bls")]
                 Self::Bls12381G1(curve) => {
                     let scalars = curve.parse_scalars::<2>(&mut cursor)?;
@@ -1558,7 +1713,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -1572,7 +1728,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -1626,6 +1783,12 @@ impl EcCurve {
                     let result = scalar[0].is_zero();
                     Ok(vec![result.unwrap_u8()])
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                    let result = scalars[0].is_zero();
+                    Ok(vec![result.unwrap_u8()])
+                }
                 #[cfg(feature = "bls")]
                 Self::Bls12381G1(curve) => {
                     let scalar = curve.parse_scalars::<1>(&mut cursor)?;
@@ -1654,7 +1817,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -1668,7 +1832,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -1714,6 +1879,11 @@ impl EcCurve {
                     let _ = curve.parse_scalars::<1>(&mut cursor)?;
                     Ok(vec![1])
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    let _ = curve.parse_scalars::<1>(&mut cursor)?;
+                    Ok(vec![1])
+                }
                 #[cfg(feature = "bls")]
                 Self::Bls12381G1(curve) => {
                     let _ = curve.parse_scalars::<1>(&mut cursor)?;
@@ -1739,7 +1909,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -1753,7 +1924,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         match self {
             #[cfg(feature = "p256")]
@@ -1763,7 +1935,9 @@ impl EcCurve {
                 if data.len() < 64 {
                     return Err("invalid operation length. Must be at least 64 bytes");
                 }
-                let (modulus, _) = NonZero::<U512>::const_new(U512::from_be_hex("0000000000000000000000000000000000000000000000000000000000000000ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"));
+                let (modulus, _) = NonZero::<U512>::const_new(U512::from_be_hex(
+                    "0000000000000000000000000000000000000000000000000000000000000000ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551",
+                ));
                 let mut value = U512::from_be_slice(&data[..64]);
                 value %= modulus;
                 let byte_array = value.to_be_byte_array();
@@ -1776,7 +1950,9 @@ impl EcCurve {
                 if data.len() < 96 {
                     return Err("invalid operation length. Must be at least 96 bytes");
                 }
-                let (modulus, _) = NonZero::<U768>::const_new(U768::from_be_hex("000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffc7635d81f4372ddf581a0db248b0a77aecec196accc52973"));
+                let (modulus, _) = NonZero::<U768>::const_new(U768::from_be_hex(
+                    "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffffffffffffffffffffffffffffffffffffffffffffffffc7635d81f4372ddf581a0db248b0a77aecec196accc52973",
+                ));
                 let mut value = U768::from_be_slice(&data[..96]);
                 value %= modulus;
                 let byte_array = value.to_be_byte_array();
@@ -1830,6 +2006,15 @@ impl EcCurve {
                 let scalar = decaf377::Fr::from_le_bytes_mod_order(&data[..64]);
                 Ok(scalar.to_bytes().to_vec())
             }
+            #[cfg(feature = "pasta")]
+            Self::Pallas(_) => {
+                if data.len() < 64 {
+                    return Err("invalid operation length. Must be at least 64 bytes");
+                }
+                let bytes = <[u8; 64]>::try_from(&data[..64]).unwrap();
+                let scalar = pasta_curves::pallas::Scalar::from_bytes_wide(&bytes);
+                Ok(scalar.to_repr().to_vec())
+            }
             #[cfg(feature = "bls")]
             Self::Bls12381G1(_) | Self::Bls12381G2(_) | Self::Bls12381Gt(_) => {
                 if data.len() < 64 {
@@ -1848,7 +2033,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -1862,7 +2048,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -1924,6 +2111,13 @@ impl EcCurve {
                     let scalar = decaf377::Fr::from_le_bytes_mod_order(&bytes);
                     Ok(scalar.to_bytes().to_vec())
                 }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(_) => {
+                    let scalar = pasta_curves::pallas::Scalar::hash::<
+                        elliptic_curve::hash2curve::ExpandMsgXmd<blake2::Blake2b512>,
+                    >(value, b"PALLAS_XMD:BLAKE2B-512");
+                    Ok(scalar.to_repr().to_vec())
+                }
                 #[cfg(feature = "bls")]
                 Self::Bls12381G1(_) | Self::Bls12381G2(_) | Self::Bls12381Gt(_) => {
                     let scalar = blsful::inner_types::Scalar::hash::<
@@ -1941,7 +2135,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         )))]
         unimplemented!()
     }
@@ -1961,9 +2156,10 @@ impl EcCurve {
                     .map_err(|_| "failed to read 64 bytes")?;
                 let signature = ecdsa::Signature::<p256::NistP256>::from_slice(&signature_bytes)
                     .map_err(|_| "failed to parse signature")?;
-                Ok(vec![self
-                    .verify_ecdsa(&points[0], &scalars[0], &signature)?
-                    .unwrap_u8()])
+                Ok(vec![
+                    self.verify_ecdsa(&points[0], &scalars[0], &signature)?
+                        .unwrap_u8(),
+                ])
             }
             #[cfg(feature = "p384")]
             Self::P384(curve) => {
@@ -1975,9 +2171,10 @@ impl EcCurve {
                     .map_err(|_| "failed to read 96 bytes")?;
                 let signature = ecdsa::Signature::<p384::NistP384>::from_slice(&signature_bytes)
                     .map_err(|_| "failed to parse signature")?;
-                Ok(vec![self
-                    .verify_ecdsa(&points[0], &scalars[0], &signature)?
-                    .unwrap_u8()])
+                Ok(vec![
+                    self.verify_ecdsa(&points[0], &scalars[0], &signature)?
+                        .unwrap_u8(),
+                ])
             }
             #[cfg(feature = "k256")]
             Self::K256(curve) => {
@@ -1989,9 +2186,10 @@ impl EcCurve {
                     .map_err(|_| "failed to read 64 bytes")?;
                 let signature = ecdsa::Signature::<k256::Secp256k1>::from_slice(&signature_bytes)
                     .map_err(|_| "failed to parse signature")?;
-                Ok(vec![self
-                    .verify_ecdsa(&points[0], &scalars[0], &signature)?
-                    .unwrap_u8()])
+                Ok(vec![
+                    self.verify_ecdsa(&points[0], &scalars[0], &signature)?
+                        .unwrap_u8(),
+                ])
             }
             _ => Err("operation is not supported for this curve"),
         }
@@ -2006,7 +2204,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta",
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -2046,7 +2245,7 @@ impl EcCurve {
                         (p256::ProjectivePoint::GENERATOR * s.as_ref() - points[0] * e).to_affine();
 
                     Ok(vec![
-                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8(),
                     ])
                 }
                 #[cfg(feature = "p384")]
@@ -2083,7 +2282,7 @@ impl EcCurve {
                         (p384::ProjectivePoint::GENERATOR * s.as_ref() - points[0] * e).to_affine();
 
                     Ok(vec![
-                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8(),
                     ])
                 }
                 #[cfg(feature = "k256")]
@@ -2120,7 +2319,7 @@ impl EcCurve {
                         (k256::ProjectivePoint::GENERATOR * s.as_ref() - points[0] * e).to_affine();
 
                     Ok(vec![
-                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8(),
                     ])
                 }
                 #[cfg(feature = "curve25519")]
@@ -2255,7 +2454,37 @@ impl EcCurve {
                         return Err("signature r cannot be zero");
                     }
 
-                    let big_r = jubjub::SubgroupPoint::generator() * scalars[0] - points[0] * e;
+                    let big_r = redjubjub_generator() * scalars[0] - points[0] * e;
+                    Ok(vec![big_r.ct_eq(&little_r).unwrap_u8()])
+                }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    cursor.set_position(cursor.position() + 32);
+                    let msg = &data[position..position + 32];
+                    let points = curve.parse_points::<1>(&mut cursor)?;
+                    if points[0].is_identity().into() {
+                        return Err("invalid public key point");
+                    }
+
+                    let mut r_bytes = [0u8; 32];
+                    cursor
+                        .read_exact(&mut r_bytes)
+                        .map_err(|_| "failed to read 32 bytes")?;
+                    let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes(), msg);
+                    let mut e_arr = [0u8; 64];
+                    e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
+                    let e = pasta_curves::pallas::Scalar::from_bytes_wide(&e_arr);
+                    let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                    let s = scalars[0];
+                    if s.is_zero().into() {
+                        return Err("signature s cannot be zero");
+                    }
+                    let little_r = points[0];
+                    if little_r.is_identity().into() {
+                        return Err("signature r cannot be zero");
+                    }
+
+                    let big_r = redpallas_generator() * scalars[0] - points[0] * e;
                     Ok(vec![big_r.ct_eq(&little_r).unwrap_u8()])
                 }
                 #[cfg(feature = "decaf377")]
@@ -2390,7 +2619,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta"
         )))]
         unimplemented!()
     }
@@ -2404,7 +2634,8 @@ impl EcCurve {
             feature = "ed448",
             feature = "jubjub",
             feature = "decaf377",
-            feature = "bls"
+            feature = "bls",
+            feature = "pasta"
         ))]
         {
             let mut cursor = Cursor::new(data);
@@ -2444,7 +2675,7 @@ impl EcCurve {
                         (p256::ProjectivePoint::GENERATOR * s.as_ref() + points[0] * e).to_affine();
 
                     Ok(vec![
-                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8(),
                     ])
                 }
                 #[cfg(feature = "p384")]
@@ -2481,7 +2712,7 @@ impl EcCurve {
                         (p384::ProjectivePoint::GENERATOR * s.as_ref() + points[0] * e).to_affine();
 
                     Ok(vec![
-                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8(),
                     ])
                 }
                 #[cfg(feature = "k256")]
@@ -2518,7 +2749,7 @@ impl EcCurve {
                         (k256::ProjectivePoint::GENERATOR * s.as_ref() + points[0] * e).to_affine();
 
                     Ok(vec![
-                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8()
+                        (big_r.is_identity() | big_r.x().ct_eq(&r_bytes)).unwrap_u8(),
                     ])
                 }
                 #[cfg(feature = "curve25519")]
@@ -2648,7 +2879,36 @@ impl EcCurve {
                     if little_r.is_identity().into() {
                         return Err("signature r cannot be zero");
                     }
-                    let big_r = jubjub::SubgroupPoint::generator() * scalars[0] + points[0] * e;
+                    let big_r = redjubjub_generator() * scalars[0] + points[0] * e;
+                    Ok(vec![big_r.ct_eq(&little_r).unwrap_u8()])
+                }
+                #[cfg(feature = "pasta")]
+                Self::Pallas(curve) => {
+                    cursor.set_position(cursor.position() + 32);
+                    let msg = &data[position..position + 32];
+                    let points = curve.parse_points::<1>(&mut cursor)?;
+                    if points[0].is_identity().into() {
+                        return Err("invalid public key point");
+                    }
+
+                    let mut r_bytes = [0u8; 32];
+                    cursor
+                        .read_exact(&mut r_bytes)
+                        .map_err(|_| "failed to read 32 bytes")?;
+                    let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes(), msg);
+                    let mut e_arr = [0u8; 64];
+                    e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
+                    let e = pasta_curves::pallas::Scalar::from_bytes_wide(&e_arr);
+                    let scalars = curve.parse_scalars::<1>(&mut cursor)?;
+                    let s = scalars[0];
+                    if s.is_zero().into() {
+                        return Err("signature s cannot be zero");
+                    }
+                    let little_r = points[0];
+                    if little_r.is_identity().into() {
+                        return Err("signature r cannot be zero");
+                    }
+                    let big_r = redpallas_generator() * scalars[0] + points[0] * e;
                     Ok(vec![big_r.ct_eq(&little_r).unwrap_u8()])
                 }
                 #[cfg(feature = "decaf377")]
@@ -2783,6 +3043,7 @@ impl EcCurve {
             feature = "jubjub",
             feature = "bls",
             feature = "decaf377",
+            feature = "pasta"
         )))]
         unimplemented!()
     }

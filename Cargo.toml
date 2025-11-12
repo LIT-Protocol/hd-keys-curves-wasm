@@ -3,14 +3,14 @@ authors = ["LIT Protocol Team"]
 categories = ["cryptography"]
 description = "Hierarchical Derived keys for LIT Protocol"
 documentation = "https://docs.rs/hd-keys-curves-wasm"
-edition = "2021"
+edition = "2024"
 homepage = "https://github.com/LIT-Protocol/hd-keys-curves-wasm"
 keywords = ["hierarchical", "bip32", "lit", "wasm", "key"]
 license = "Apache-2.0 OR MIT"
 name = "hd-keys-curves-wasm"
 readme = "README.md"
 repository = "https://github.com/LIT-Protocol/hd-keys-curves-wasm"
-version = "1.0.3"
+version = "1.0.4"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -26,13 +26,14 @@ p384 = ["dep:p384", "sha2", "elliptic-curve-tools"]
 bls = ["dep:blsful", "sha2"]
 jubjub = ["dep:jubjub", "blake2", "elliptic-curve-tools"]
 decaf377 = ["dep:decaf377", "blake2", "elliptic-curve-tools"]
+pasta = ["dep:pasta_curves", "blake2", "elliptic-curve-tools"]
 sha3 = ["dep:sha3"]
 sha2 = ["dep:sha2"]
 blake2 = ["dep:blake2"]
 
 [dependencies]
 blake2 = { version = "0.10", default-features = false, optional = true }
-blsful = { version = "3.0.0-pre8", default-features = false, features = ["rust"], optional = true }
+blsful = { version = "3.0.0", default-features = false, features = ["rust"], optional = true }
 curve25519-dalek-ml = { version = "4.3" , default-features = false, features = ["digest", "group", "group-bits", "zeroize"], optional = true }
 ecdsa = { version = "0.16", features = ["arithmetic"] }
 ed448-goldilocks-plus = { version = "0.16", optional = true }
@@ -40,10 +41,11 @@ elliptic-curve = { version = "0.13", default-features = false, features = ["arit
 elliptic-curve-tools = { version = "0.1", optional = true }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 jubjub = { version = "0.10", default-features = false, features = ["bits"], package = "jubjub-plus", optional = true }
-decaf377 = { git = "https://github.com/LIT-Protocol/decaf377.git", rev = "1c5755b2b90e1969d47ce89cf2d35078984a0ee5", optional = true }
+decaf377 = { git = "https://github.com/LIT-Protocol/decaf377.git", rev = "b2f76eda2e56bbaa818196d7c2d795312bbfbd92", optional = true }
 k256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
 p256 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
 p384 = { version = "0.13", default-features = false, features = ["arithmetic", "hash2curve", "expose-field", "bits"], optional = true }
+pasta_curves = { version = "0.5", git = "https://github.com/LIT-Protocol/pasta_curves.git", features = ["alloc", "serde"], optional = true }
 sha2 = { version = "0.10", default-features = false, optional = true }
 sha3 = { version = "0.10", default-features = false, optional = true }
 subtle = "2.6"

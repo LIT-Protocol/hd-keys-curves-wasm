@@ -1,7 +1,7 @@
 use elliptic_curve::hash2curve::ExpandMsgXmd;
 
-use crate::derive::HDDeriver;
 use crate::HDDerivable;
+use crate::derive::HDDeriver;
 
 impl HDDeriver for blsful::inner_types::Scalar {
     fn create(msg: &[u8], dst: &[u8]) -> Self {

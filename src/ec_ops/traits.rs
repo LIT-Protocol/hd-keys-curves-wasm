@@ -1,6 +1,6 @@
 use elliptic_curve::{
-    sec1::{EncodedPoint, FromEncodedPoint},
     PrimeField,
+    sec1::{EncodedPoint, FromEncodedPoint},
 };
 use std::io::{Cursor, Read};
 
@@ -55,9 +55,9 @@ impl EcParser for k256::Secp256k1 {
         let mut points = [k256::ProjectivePoint::default(); N];
         let mut bytes = [4u8; 65];
         for point in points.iter_mut() {
-            reader.read_exact(&mut bytes[1..]).map_err(|_| {
-                "tried to read 65 bytes for secp256k1 points but reached end of stream"
-            })?;
+            reader.read_exact(&mut bytes[1..]).map_err(
+                |_| "tried to read 65 bytes for secp256k1 points but reached end of stream",
+            )?;
             let encoded_point = EncodedPoint::<k256::Secp256k1>::from_bytes(bytes)
                 .map_err(|_| "invalid secp256k1 point")?;
             *point = Option::<k256::AffinePoint>::from(k256::AffinePoint::from_encoded_point(
@@ -98,9 +98,9 @@ impl EcParser for p256::NistP256 {
         let mut points = [p256::ProjectivePoint::default(); N];
         let mut bytes = [4u8; 65];
         for point in points.iter_mut() {
-            reader.read_exact(&mut bytes[1..]).map_err(|_| {
-                "tried to read 65 bytes for secp256r1 points but reached end of stream"
-            })?;
+            reader.read_exact(&mut bytes[1..]).map_err(
+                |_| "tried to read 65 bytes for secp256r1 points but reached end of stream",
+            )?;
             let encoded_point = EncodedPoint::<p256::NistP256>::from_bytes(bytes)
                 .map_err(|_| "invalid secp256r1 point")?;
             *point = Option::<p256::AffinePoint>::from(p256::AffinePoint::from_encoded_point(
@@ -141,9 +141,9 @@ impl EcParser for p384::NistP384 {
         let mut points = [p384::ProjectivePoint::default(); N];
         let mut bytes = [4u8; 97];
         for point in points.iter_mut() {
-            reader.read_exact(&mut bytes[1..]).map_err(|_| {
-                "tried to read 97 bytes for secp384r1 points but reached end of stream"
-            })?;
+            reader.read_exact(&mut bytes[1..]).map_err(
+                |_| "tried to read 97 bytes for secp384r1 points but reached end of stream",
+            )?;
             let encoded_point = EncodedPoint::<p384::NistP384>::from_bytes(bytes)
                 .map_err(|_| "invalid secp384r1 point")?;
             *point = Option::<p384::AffinePoint>::from(p384::AffinePoint::from_encoded_point(
@@ -186,9 +186,9 @@ impl EcParser for Ed25519 {
         let mut points = [curve25519_dalek_ml::EdwardsPoint::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
-            reader.read_exact(&mut bytes).map_err(|_| {
-                "tried to read 32 bytes for ed25519 points but reached end of stream"
-            })?;
+            reader.read_exact(&mut bytes).map_err(
+                |_| "tried to read 32 bytes for ed25519 points but reached end of stream",
+            )?;
             *point = Option::from(curve25519_dalek_ml::EdwardsPoint::from_bytes(&bytes))
                 .ok_or("invalid ed25519 point")?;
         }
@@ -228,9 +228,9 @@ impl EcParser for Ristretto25519 {
         let mut points = [curve25519_dalek_ml::RistrettoPoint::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
-            reader.read_exact(&mut bytes).map_err(|_| {
-                "tried to read 32 bytes for ristretto25519 points but reached end of stream"
-            })?;
+            reader.read_exact(&mut bytes).map_err(
+                |_| "tried to read 32 bytes for ristretto25519 points but reached end of stream",
+            )?;
             *point = Option::from(curve25519_dalek_ml::RistrettoPoint::from_bytes(&bytes))
                 .ok_or("invalid ristretto25519 point")?;
         }
@@ -266,7 +266,7 @@ impl EcParser for Ed448 {
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
         use elliptic_curve::{
-            generic_array::{typenum, GenericArray},
+            generic_array::{GenericArray, typenum},
             group::GroupEncoding,
         };
 
@@ -315,9 +315,9 @@ impl EcParser for JubJub {
         let mut points = [jubjub::SubgroupPoint::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
-            reader.read_exact(&mut bytes).map_err(|_| {
-                "tried to read 32 bytes for jubjub points but reached end of stream"
-            })?;
+            reader.read_exact(&mut bytes).map_err(
+                |_| "tried to read 32 bytes for jubjub points but reached end of stream",
+            )?;
             *point = Option::from(jubjub::SubgroupPoint::from_bytes(&bytes))
                 .ok_or("invalid jubjub point")?;
         }
@@ -343,6 +343,49 @@ impl EcParser for JubJub {
     }
 }
 
+#[cfg(feature = "pasta")]
+impl EcParser for pasta_curves::pallas::Pallas {
+    type Point = pasta_curves::pallas::Point;
+    type Scalar = pasta_curves::pallas::Scalar;
+
+    fn parse_points<const N: usize>(
+        &self,
+        reader: &mut Cursor<&[u8]>,
+    ) -> Result<[Self::Point; N], &'static str> {
+        use elliptic_curve::group::GroupEncoding;
+
+        let mut points = [pasta_curves::pallas::Point::default(); N];
+        let mut bytes = [0u8; 32];
+        for point in points.iter_mut() {
+            reader.read_exact(&mut bytes).map_err(
+                |_| "tried to read 32 bytes for pallas points but reached end of stream",
+            )?;
+            let repr = bytes.into();
+            *point = Option::from(pasta_curves::pallas::Point::from_bytes(&repr))
+                .ok_or("invalid pallas point")?;
+        }
+        Ok(points)
+    }
+
+    fn parse_scalars<const N: usize>(
+        &self,
+        reader: &mut Cursor<&[u8]>,
+    ) -> Result<[Self::Scalar; N], &'static str> {
+        let mut scalars = [pasta_curves::pallas::Scalar::ZERO; N];
+        let mut repr = [0u8; 32];
+        for scalar in scalars.iter_mut() {
+            reader
+                .read_exact(&mut repr)
+                .map_err(|_| "Failed to read enough bytes for the scalar")?;
+            *scalar = Option::<pasta_curves::pallas::Scalar>::from(
+                pasta_curves::pallas::Scalar::from_le_bytes(&repr),
+            )
+            .ok_or("Invalid scalar bytes")?;
+        }
+        Ok(scalars)
+    }
+}
+
 #[cfg(feature = "decaf377")]
 impl EcParser for Decaf377 {
     type Point = decaf377::Element;
@@ -357,9 +400,9 @@ impl EcParser for Decaf377 {
         let mut points = [decaf377::Element::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
-            reader.read_exact(&mut bytes).map_err(|_| {
-                "tried to read 32 bytes for decaf377 points but reached end of stream"
-            })?;
+            reader.read_exact(&mut bytes).map_err(
+                |_| "tried to read 32 bytes for decaf377 points but reached end of stream",
+            )?;
             *point = Option::from(decaf377::Element::from_bytes(&bytes))
                 .ok_or("invalid decaf377 point")?;
         }
@@ -395,9 +438,9 @@ impl EcParser for blsful::inner_types::InnerBls12381G1 {
         let mut points = [blsful::inner_types::G1Projective::default(); N];
         let mut bytes = [0u8; blsful::inner_types::G1Projective::UNCOMPRESSED_BYTES];
         for point in points.iter_mut() {
-            reader.read_exact(&mut bytes).map_err(|_| {
-                "tried to read 96 bytes for G1Projective points but reached end of stream"
-            })?;
+            reader.read_exact(&mut bytes).map_err(
+                |_| "tried to read 96 bytes for G1Projective points but reached end of stream",
+            )?;
             *point = Option::from(blsful::inner_types::G1Projective::from_uncompressed(&bytes))
                 .ok_or("invalid G1Projective point")?;
         }
@@ -435,9 +478,9 @@ impl EcParser for blsful::inner_types::InnerBls12381G2 {
         let mut points = [blsful::inner_types::G2Projective::default(); N];
         let mut bytes = [0u8; blsful::inner_types::G2Projective::UNCOMPRESSED_BYTES];
         for point in points.iter_mut() {
-            reader.read_exact(&mut bytes).map_err(|_| {
-                "tried to read 192 bytes for G2Projective points but reached end of stream"
-            })?;
+            reader.read_exact(&mut bytes).map_err(
+                |_| "tried to read 192 bytes for G2Projective points but reached end of stream",
+            )?;
             *point = Option::from(blsful::inner_types::G2Projective::from_uncompressed(&bytes))
                 .ok_or("invalid G2Projective point")?;
         }
@@ -475,9 +518,9 @@ impl EcParser for Bls12381Gt {
         let mut points = [blsful::inner_types::Gt::default(); N];
         let mut bytes = [0u8; blsful::inner_types::Gt::BYTES];
         for point in points.iter_mut() {
-            reader.read_exact(bytes.as_mut()).map_err(|_| {
-                "tried to read 576 bytes for bls12_381_gt points but reached end of stream"
-            })?;
+            reader.read_exact(bytes.as_mut()).map_err(
+                |_| "tried to read 576 bytes for bls12_381_gt points but reached end of stream",
+            )?;
             *point = Option::from(blsful::inner_types::Gt::from_bytes(&bytes))
                 .ok_or("invalid bls12_381_gt point")?;
         }
