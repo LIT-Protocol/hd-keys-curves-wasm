@@ -1,22 +1,9 @@
-use elliptic_curve::hash2curve::ExpandMsgXmd;
+use lit_rust_crypto::{blsful::inner_types::Scalar, hash2curve::ExpandMsgXmd};
 
-use crate::HDDerivable;
 use crate::derive::HDDeriver;
 
-impl HDDeriver for blsful::inner_types::Scalar {
+impl HDDeriver for Scalar {
     fn create(msg: &[u8], dst: &[u8]) -> Self {
-        blsful::inner_types::Scalar::hash::<ExpandMsgXmd<sha2::Sha256>>(msg, dst)
-    }
-}
-
-impl HDDerivable for blsful::inner_types::G1Projective {
-    fn sum_of_products(points: &[Self], scalars: &[Self::Scalar]) -> Self {
-        blsful::inner_types::G1Projective::sum_of_products(points, scalars)
-    }
-}
-
-impl HDDerivable for blsful::inner_types::G2Projective {
-    fn sum_of_products(points: &[Self], scalars: &[Self::Scalar]) -> Self {
-        blsful::inner_types::G2Projective::sum_of_products(points, scalars)
+        Scalar::hash::<ExpandMsgXmd<sha2::Sha256>>(msg, dst)
     }
 }

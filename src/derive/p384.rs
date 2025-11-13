@@ -1,40 +1,22 @@
-use crate::HDDerivable;
-use crate::derive::{HDDerivableScalar, HDDeriver};
-use elliptic_curve::hash2curve::{ExpandMsgXmd, GroupDigest};
-use elliptic_curve_tools::SumOfProducts;
+use crate::derive::HDDeriver;
+use lit_rust_crypto::{
+    hash2curve::{ExpandMsgXmd, GroupDigest},
+    p384::{NistP384, Scalar},
+};
 
-use super::scalar_primitive_to_limbs;
-
-impl HDDeriver for p384::Scalar {
+impl HDDeriver for Scalar {
     fn create(msg: &[u8], dst: &[u8]) -> Self {
         let msg = [msg];
         let dst = [dst];
-        p384::NistP384::hash_to_scalar::<ExpandMsgXmd<sha2::Sha384>>(&msg, &dst)
+        NistP384::hash_to_scalar::<ExpandMsgXmd<sha2::Sha384>>(&msg, &dst)
             .expect("hash_to_scalar failed")
-    }
-}
-
-impl HDDerivableScalar<6> for p384::Scalar {
-    fn as_limbs(&self) -> [u64; 6] {
-        scalar_primitive_to_limbs::<6, 12, p384::NistP384>(*self)
-    }
-}
-
-impl HDDerivable for p384::ProjectivePoint {
-    fn sum_of_products(points: &[Self], scalars: &[Self::Scalar]) -> Self {
-        let data = scalars
-            .iter()
-            .zip(points.iter())
-            .map(|(&s, &p)| (s, p))
-            .collect::<Vec<_>>();
-        <p384::ProjectivePoint as SumOfProducts>::sum_of_products(data.as_slice())
     }
 }
 
 #[cfg(test)]
 mod test {
-    use elliptic_curve::Field;
-    use p384::{ProjectivePoint, Scalar};
+    use lit_rust_crypto::elliptic_curve::Field;
+    use lit_rust_crypto::p384::{ProjectivePoint, Scalar};
 
     use crate::HDDerivable;
 

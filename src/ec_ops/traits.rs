@@ -1,7 +1,10 @@
+use lit_rust_crypto::*;
+
 use elliptic_curve::{
     PrimeField,
     sec1::{EncodedPoint, FromEncodedPoint},
 };
+use group::GroupEncoding;
 use std::io::{Cursor, Read};
 
 pub trait EcParser {
@@ -174,22 +177,20 @@ impl EcParser for p384::NistP384 {
 
 #[cfg(feature = "curve25519")]
 impl EcParser for Ed25519 {
-    type Point = curve25519_dalek_ml::EdwardsPoint;
-    type Scalar = curve25519_dalek_ml::Scalar;
+    type Point = curve25519_dalek::EdwardsPoint;
+    type Scalar = curve25519_dalek::Scalar;
 
     fn parse_points<const N: usize>(
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
-        use elliptic_curve::group::GroupEncoding;
-
-        let mut points = [curve25519_dalek_ml::EdwardsPoint::default(); N];
+        let mut points = [curve25519_dalek::EdwardsPoint::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
             reader.read_exact(&mut bytes).map_err(
                 |_| "tried to read 32 bytes for ed25519 points but reached end of stream",
             )?;
-            *point = Option::from(curve25519_dalek_ml::EdwardsPoint::from_bytes(&bytes))
+            *point = Option::from(curve25519_dalek::EdwardsPoint::from_bytes(&bytes))
                 .ok_or("invalid ed25519 point")?;
         }
         Ok(points)
@@ -199,14 +200,14 @@ impl EcParser for Ed25519 {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Scalar; N], &'static str> {
-        let mut scalars = [curve25519_dalek_ml::Scalar::ZERO; N];
+        let mut scalars = [curve25519_dalek::Scalar::ZERO; N];
         let mut repr = [0u8; 32];
         for scalar in scalars.iter_mut() {
             reader
                 .read_exact(&mut repr)
                 .map_err(|_| "Failed to read enough bytes for the scalar")?;
-            *scalar = Option::<curve25519_dalek_ml::Scalar>::from(
-                curve25519_dalek_ml::Scalar::from_canonical_bytes(repr),
+            *scalar = Option::<curve25519_dalek::Scalar>::from(
+                curve25519_dalek::Scalar::from_canonical_bytes(repr),
             )
             .ok_or("Invalid scalar bytes")?;
         }
@@ -216,22 +217,20 @@ impl EcParser for Ed25519 {
 
 #[cfg(feature = "curve25519")]
 impl EcParser for Ristretto25519 {
-    type Point = curve25519_dalek_ml::RistrettoPoint;
-    type Scalar = curve25519_dalek_ml::Scalar;
+    type Point = curve25519_dalek::RistrettoPoint;
+    type Scalar = curve25519_dalek::Scalar;
 
     fn parse_points<const N: usize>(
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
-        use elliptic_curve::group::GroupEncoding;
-
-        let mut points = [curve25519_dalek_ml::RistrettoPoint::default(); N];
+        let mut points = [curve25519_dalek::RistrettoPoint::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
             reader.read_exact(&mut bytes).map_err(
                 |_| "tried to read 32 bytes for ristretto25519 points but reached end of stream",
             )?;
-            *point = Option::from(curve25519_dalek_ml::RistrettoPoint::from_bytes(&bytes))
+            *point = Option::from(curve25519_dalek::RistrettoPoint::from_bytes(&bytes))
                 .ok_or("invalid ristretto25519 point")?;
         }
         Ok(points)
@@ -241,14 +240,14 @@ impl EcParser for Ristretto25519 {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Scalar; N], &'static str> {
-        let mut scalars = [curve25519_dalek_ml::Scalar::ZERO; N];
+        let mut scalars = [curve25519_dalek::Scalar::ZERO; N];
         let mut repr = [0u8; 32];
         for scalar in scalars.iter_mut() {
             reader
                 .read_exact(&mut repr)
                 .map_err(|_| "Failed to read enough bytes for the scalar")?;
-            *scalar = Option::<curve25519_dalek_ml::Scalar>::from(
-                curve25519_dalek_ml::Scalar::from_canonical_bytes(repr),
+            *scalar = Option::<curve25519_dalek::Scalar>::from(
+                curve25519_dalek::Scalar::from_canonical_bytes(repr),
             )
             .ok_or("Invalid scalar bytes")?;
         }
@@ -258,25 +257,22 @@ impl EcParser for Ristretto25519 {
 
 #[cfg(feature = "ed448")]
 impl EcParser for Ed448 {
-    type Point = ed448_goldilocks_plus::EdwardsPoint;
-    type Scalar = ed448_goldilocks_plus::Scalar;
+    type Point = ed448_goldilocks::EdwardsPoint;
+    type Scalar = ed448_goldilocks::Scalar;
 
     fn parse_points<const N: usize>(
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
-        use elliptic_curve::{
-            generic_array::{GenericArray, typenum},
-            group::GroupEncoding,
-        };
+        use elliptic_curve::generic_array::{GenericArray, typenum};
 
-        let mut points = [ed448_goldilocks_plus::EdwardsPoint::default(); N];
+        let mut points = [ed448_goldilocks::EdwardsPoint::default(); N];
         let mut bytes = GenericArray::<u8, typenum::U57>::default();
         for point in points.iter_mut() {
             reader
                 .read_exact(&mut bytes)
                 .map_err(|_| "tried to read 57 bytes for ed448 points but reached end of stream")?;
-            *point = Option::from(ed448_goldilocks_plus::EdwardsPoint::from_bytes(&bytes))
+            *point = Option::from(ed448_goldilocks::EdwardsPoint::from_bytes(&bytes))
                 .ok_or("invalid ed448 point")?;
         }
         Ok(points)
@@ -286,14 +282,14 @@ impl EcParser for Ed448 {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Scalar; N], &'static str> {
-        let mut scalars = [ed448_goldilocks_plus::Scalar::ZERO; N];
-        let mut repr = ed448_goldilocks_plus::ScalarBytes::default();
+        let mut scalars = [ed448_goldilocks::Scalar::ZERO; N];
+        let mut repr = ed448_goldilocks::ScalarBytes::default();
         for scalar in scalars.iter_mut() {
             reader
                 .read_exact(&mut repr)
                 .map_err(|_| "Failed to read enough bytes for the scalar")?;
-            *scalar = Option::<ed448_goldilocks_plus::Scalar>::from(
-                ed448_goldilocks_plus::Scalar::from_canonical_bytes(&repr),
+            *scalar = Option::<ed448_goldilocks::Scalar>::from(
+                ed448_goldilocks::Scalar::from_canonical_bytes(&repr),
             )
             .ok_or("Invalid scalar bytes")?;
         }
@@ -310,8 +306,6 @@ impl EcParser for JubJub {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
-        use elliptic_curve::group::GroupEncoding;
-
         let mut points = [jubjub::SubgroupPoint::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
@@ -328,7 +322,7 @@ impl EcParser for JubJub {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Scalar; N], &'static str> {
-        use elliptic_curve::Field;
+        use ff::Field;
 
         let mut scalars = [jubjub::Scalar::ZERO; N];
         let mut repr = [0u8; 32];
@@ -344,25 +338,23 @@ impl EcParser for JubJub {
 }
 
 #[cfg(feature = "pasta")]
-impl EcParser for pasta_curves::pallas::Pallas {
-    type Point = pasta_curves::pallas::Point;
-    type Scalar = pasta_curves::pallas::Scalar;
+impl EcParser for pallas::Pallas {
+    type Point = pallas::Point;
+    type Scalar = pallas::Scalar;
 
     fn parse_points<const N: usize>(
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
-        use elliptic_curve::group::GroupEncoding;
-
-        let mut points = [pasta_curves::pallas::Point::default(); N];
+        let mut points = [pallas::Point::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
             reader.read_exact(&mut bytes).map_err(
                 |_| "tried to read 32 bytes for pallas points but reached end of stream",
             )?;
             let repr = bytes.into();
-            *point = Option::from(pasta_curves::pallas::Point::from_bytes(&repr))
-                .ok_or("invalid pallas point")?;
+            *point =
+                Option::from(pallas::Point::from_bytes(&repr)).ok_or("invalid pallas point")?;
         }
         Ok(points)
     }
@@ -371,16 +363,14 @@ impl EcParser for pasta_curves::pallas::Pallas {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Scalar; N], &'static str> {
-        let mut scalars = [pasta_curves::pallas::Scalar::ZERO; N];
+        let mut scalars = [pallas::Scalar::ZERO; N];
         let mut repr = [0u8; 32];
         for scalar in scalars.iter_mut() {
             reader
                 .read_exact(&mut repr)
                 .map_err(|_| "Failed to read enough bytes for the scalar")?;
-            *scalar = Option::<pasta_curves::pallas::Scalar>::from(
-                pasta_curves::pallas::Scalar::from_le_bytes(&repr),
-            )
-            .ok_or("Invalid scalar bytes")?;
+            *scalar = Option::<pallas::Scalar>::from(pallas::Scalar::from_le_bytes(&repr))
+                .ok_or("Invalid scalar bytes")?;
         }
         Ok(scalars)
     }
@@ -395,8 +385,6 @@ impl EcParser for Decaf377 {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
-        use elliptic_curve::group::GroupEncoding;
-
         let mut points = [decaf377::Element::default(); N];
         let mut bytes = [0u8; 32];
         for point in points.iter_mut() {
@@ -515,14 +503,15 @@ impl EcParser for Bls12381Gt {
         &self,
         reader: &mut Cursor<&[u8]>,
     ) -> Result<[Self::Point; N], &'static str> {
-        let mut points = [blsful::inner_types::Gt::default(); N];
-        let mut bytes = [0u8; blsful::inner_types::Gt::BYTES];
+        use blsful::inner_types::*;
+
+        let mut points = [Gt::default(); N];
+        let mut bytes = <Gt as GroupEncoding>::Repr::default();
         for point in points.iter_mut() {
             reader.read_exact(bytes.as_mut()).map_err(
                 |_| "tried to read 576 bytes for bls12_381_gt points but reached end of stream",
             )?;
-            *point = Option::from(blsful::inner_types::Gt::from_bytes(&bytes))
-                .ok_or("invalid bls12_381_gt point")?;
+            *point = Option::from(Gt::from_bytes(&bytes)).ok_or("invalid bls12_381_gt point")?;
         }
         Ok(points)
     }

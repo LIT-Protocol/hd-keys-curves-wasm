@@ -1,8 +1,8 @@
-use crate::HDDerivable;
-use crate::derive::{HDDerivableScalar, HDDeriver};
-use decaf377::{Element as ProjectivePoint, Fr as Scalar};
-use elliptic_curve::hash2curve::{ExpandMsg, ExpandMsgXmd, Expander};
-use elliptic_curve_tools::SumOfProducts;
+use crate::derive::HDDeriver;
+use lit_rust_crypto::{
+    decaf377::Fr as Scalar,
+    hash2curve::{ExpandMsg, ExpandMsgXmd, Expander},
+};
 
 impl HDDeriver for Scalar {
     fn create(msg: &[u8], dst: &[u8]) -> Self {
@@ -15,33 +15,12 @@ impl HDDeriver for Scalar {
     }
 }
 
-impl HDDerivableScalar<4> for Scalar {
-    fn as_limbs(&self) -> [u64; 4] {
-        let bytes = self.to_bytes_le();
-        [
-            u64::from_le_bytes(bytes[0..8].try_into().unwrap()),
-            u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
-            u64::from_le_bytes(bytes[16..24].try_into().unwrap()),
-            u64::from_le_bytes(bytes[24..32].try_into().unwrap()),
-        ]
-    }
-}
-
-impl HDDerivable for ProjectivePoint {
-    fn sum_of_products(points: &[Self], scalars: &[Self::Scalar]) -> Self {
-        let data = scalars
-            .iter()
-            .zip(points.iter())
-            .map(|(&s, &p)| (s, p))
-            .collect::<Vec<_>>();
-        <Self as SumOfProducts>::sum_of_products(data.as_slice())
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use decaf377::{Element as ProjectivePoint, Fr as Scalar};
-    use elliptic_curve::Field;
+    use lit_rust_crypto::{
+        decaf377::{Element as ProjectivePoint, Fr as Scalar},
+        ff::Field,
+    };
 
     use crate::HDDerivable;
 

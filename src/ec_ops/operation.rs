@@ -1,10 +1,10 @@
 use crate::ec_ops::consts;
 use crate::schnorr::parse_hash;
 use crate::{EcParser, HDDerivable};
+use lit_rust_crypto::*;
+
 #[cfg(feature = "bls")]
 use blsful::inner_types::G2Prepared;
-#[cfg(feature = "pasta")]
-use elliptic_curve::PrimeField;
 use elliptic_curve::{
     CurveArithmetic, Field, Group, PrimeCurve,
     bigint::U256,
@@ -14,6 +14,8 @@ use elliptic_curve::{
     point::AffineCoordinates,
     sec1::ToEncodedPoint,
 };
+#[cfg(feature = "pasta")]
+use ff::PrimeField;
 use std::io::{Cursor, Read};
 use subtle::{Choice, ConstantTimeEq};
 
@@ -30,12 +32,12 @@ fn redjubjub_generator() -> jubjub::SubgroupPoint {
     pt.into_subgroup().unwrap()
 }
 #[cfg(feature = "pasta")]
-fn redpallas_generator() -> pasta_curves::pallas::Point {
+fn redpallas_generator() -> pallas::Point {
     const SPENDAUTHSIG_BASEPOINT_BYTES: [u8; 32] = [
         99, 201, 117, 184, 132, 114, 26, 141, 12, 161, 112, 123, 227, 12, 127, 12, 95, 68, 95, 62,
         124, 24, 141, 59, 6, 214, 241, 40, 179, 35, 85, 183,
     ];
-    pasta_curves::pallas::Affine::from_bytes(&(SPENDAUTHSIG_BASEPOINT_BYTES.into()))
+    pallas::Affine::from_bytes(&(SPENDAUTHSIG_BASEPOINT_BYTES.into()))
         .unwrap()
         .into()
 }
@@ -65,7 +67,7 @@ pub enum EcCurve {
     #[cfg(feature = "decaf377")]
     Decaf377(super::Decaf377),
     #[cfg(feature = "pasta")]
-    Pallas(pasta_curves::pallas::Pallas),
+    Pallas(pallas::Pallas),
 }
 
 impl TryFrom<&[u8]> for EcCurve {
@@ -100,7 +102,7 @@ impl TryFrom<&[u8]> for EcCurve {
             #[cfg(feature = "bls")]
             consts::CURVE_NAME_BLS12381GT => Ok(Self::Bls12381Gt(super::Bls12381Gt)),
             #[cfg(feature = "pasta")]
-            consts::CURVE_NAME_PALLAS => Ok(Self::Pallas(pasta_curves::pallas::Pallas)),
+            consts::CURVE_NAME_PALLAS => Ok(Self::Pallas(pallas::Pallas)),
             _ => Err("invalid value for EcCurve"),
         }
     }
@@ -198,7 +200,7 @@ impl EcCurve {
                     let point = curve.parse_points::<1>(&mut cursor)?;
                     let scalar = curve.parse_scalars::<1>(&mut cursor)?;
                     let result = point[0] * scalar[0];
-                    Ok(result.to_bytes().to_vec())
+                    Ok(result.to_bytes().as_ref().to_vec())
                 }
                 #[cfg(feature = "pasta")]
                 Self::Pallas(curve) => {
@@ -303,7 +305,7 @@ impl EcCurve {
                 Self::Bls12381Gt(curve) => {
                     let points = curve.parse_points::<2>(&mut cursor)?;
                     let result = points[0] + points[1];
-                    Ok(result.to_bytes().to_vec())
+                    Ok(result.to_bytes().as_ref().to_vec())
                 }
                 #[cfg(feature = "pasta")]
                 Self::Pallas(curve) => {
@@ -406,7 +408,7 @@ impl EcCurve {
                 Self::Bls12381Gt(curve) => {
                     let points = curve.parse_points::<1>(&mut cursor)?;
                     let result = -points[0];
-                    Ok(result.to_bytes().to_vec())
+                    Ok(result.to_bytes().as_ref().to_vec())
                 }
                 #[cfg(feature = "pasta")]
                 Self::Pallas(curve) => {
@@ -509,8 +511,17 @@ impl EcCurve {
                 #[cfg(feature = "bls")]
                 Self::Bls12381Gt(curve) => {
                     let points = curve.parse_points::<2>(&mut cursor)?;
-                    let result = points[0].ct_eq(&points[1]);
-                    Ok(vec![result.unwrap_u8()])
+                    let mut output = 0u8;
+                    for (lhs, rhs) in points[0]
+                        .to_bytes()
+                        .as_ref()
+                        .iter()
+                        .zip(points[1].to_bytes().as_ref())
+                    {
+                        output |= lhs ^ rhs;
+                    }
+
+                    Ok(vec![output])
                 }
                 #[cfg(feature = "pasta")]
                 Self::Pallas(curve) => {
@@ -776,28 +787,28 @@ impl EcCurve {
                 }
                 #[cfg(feature = "curve25519")]
                 Self::Ed25519(_) => {
-                    let point = curve25519_dalek_ml::EdwardsPoint::hash_to_curve::<
-                        elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha512>,
+                    let point = curve25519_dalek::EdwardsPoint::hash_to_curve::<
+                        hash2curve::ExpandMsgXmd<sha2::Sha512>,
                     >(value, b"edwards25519_XMD:SHA-512_ELL2_RO_");
                     Ok(point.compress().as_bytes().to_vec())
                 }
                 #[cfg(feature = "curve25519")]
                 Self::Ristretto25519(_) => {
                     let point =
-                        curve25519_dalek_ml::RistrettoPoint::hash_from_bytes::<sha2::Sha512>(value);
+                        curve25519_dalek::RistrettoPoint::hash_from_bytes::<sha2::Sha512>(value);
                     Ok(point.compress().as_bytes().to_vec())
                 }
                 #[cfg(feature = "ed448")]
                 Self::Ed448(_) => {
-                    let point = ed448_goldilocks_plus::EdwardsPoint::hash::<
-                        elliptic_curve::hash2curve::ExpandMsgXof<sha3::Shake256>,
+                    let point = ed448_goldilocks::EdwardsPoint::hash::<
+                        hash2curve::ExpandMsgXof<sha3::Shake256>,
                     >(value, b"edwards448_XOF:SHAKE-256_ELL2_RO_");
                     Ok(point.compress().as_bytes().to_vec())
                 }
                 #[cfg(feature = "jubjub")]
                 Self::JubJub(_) => {
                     let point = jubjub::SubgroupPoint::from(jubjub::ExtendedPoint::hash::<
-                        elliptic_curve::hash2curve::ExpandMsgXmd<blake2::Blake2b512>,
+                        hash2curve::ExpandMsgXmd<blake2::Blake2b512>,
                     >(
                         value,
                         b"jubjub_XMD:BLAKE2B-512_SSWU_RO_",
@@ -806,7 +817,7 @@ impl EcCurve {
                 }
                 #[cfg(feature = "decaf377")]
                 Self::Decaf377(_) => {
-                    use elliptic_curve::hash2curve::{ExpandMsg, ExpandMsgXmd, Expander};
+                    use hash2curve::{ExpandMsg, ExpandMsgXmd, Expander};
                     const DST: &[u8] = b"decaf377_XMD:BLAKE2B-512_ELL2_RO_";
                     let mut expander =
                         ExpandMsgXmd::<blake2::Blake2b512>::expand_message(&[value], &[DST], 96)
@@ -822,36 +833,37 @@ impl EcCurve {
                 #[cfg(feature = "bls")]
                 Self::Bls12381G1(_) => {
                     let point = blsful::inner_types::G1Projective::hash::<
-                        elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                        hash2curve::ExpandMsgXmd<sha2::Sha256>,
                     >(value, b"BLS12381G1_XMD:SHA-256_SSWU_RO_");
                     Ok(point.to_uncompressed().to_vec())
                 }
                 #[cfg(feature = "bls")]
                 Self::Bls12381G2(_) => {
                     let point = blsful::inner_types::G2Projective::hash::<
-                        elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                        hash2curve::ExpandMsgXmd<sha2::Sha256>,
                     >(value, b"BLS12381G2_XMD:SHA-256_SSWU_RO_");
                     Ok(point.to_uncompressed().to_vec())
                 }
                 #[cfg(feature = "bls")]
                 Self::Bls12381Gt(_) => {
+                    use blsful::inner_types::MillerLoopResult;
+                    use group::prime::PrimeCurveAffine;
+
                     let point = blsful::inner_types::G1Projective::hash::<
-                        elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                        hash2curve::ExpandMsgXmd<sha2::Sha256>,
                     >(value, b"BLS12381G1_XMD:SHA-256_SSWU_RO_")
                     .to_affine();
                     let generator = blsful::inner_types::G2Affine::generator();
                     let ref_t = &[(&point, &G2Prepared::from(generator))];
                     let result =
                         blsful::inner_types::multi_miller_loop(ref_t).final_exponentiation();
-                    Ok(result.to_bytes().to_vec())
+                    Ok(result.to_bytes().as_ref().to_vec())
                 }
                 #[cfg(feature = "pasta")]
                 Self::Pallas(_) => {
-                    use pasta_curves::arithmetic::CurveExt;
+                    use pasta::arithmetic::CurveExt;
 
-                    let hasher = pasta_curves::pallas::Point::hash_to_curve(
-                        "PALLAS_XMD:BLAKE2B-512_SSWU_RO_",
-                    );
+                    let hasher = pallas::Point::hash_to_curve("PALLAS_XMD:BLAKE2B-512_SSWU_RO_");
                     let point = hasher(value);
                     Ok(point.to_bytes().to_vec())
                 }
@@ -912,8 +924,7 @@ impl EcCurve {
                 Self::Ed25519(curve) => {
                     let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
                     let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
-                    let result =
-                        curve25519_dalek_ml::EdwardsPoint::sum_of_products(&points, &scalars);
+                    let result = curve25519_dalek::EdwardsPoint::sum_of_products(&points, &scalars);
                     Ok(result.compress().as_bytes().to_vec())
                 }
                 #[cfg(feature = "curve25519")]
@@ -921,15 +932,14 @@ impl EcCurve {
                     let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
                     let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
                     let result =
-                        curve25519_dalek_ml::RistrettoPoint::sum_of_products(&points, &scalars);
+                        curve25519_dalek::RistrettoPoint::sum_of_products(&points, &scalars);
                     Ok(result.compress().as_bytes().to_vec())
                 }
                 #[cfg(feature = "ed448")]
                 Self::Ed448(curve) => {
                     let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
                     let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
-                    let result =
-                        ed448_goldilocks_plus::EdwardsPoint::sum_of_products(&points, &scalars);
+                    let result = ed448_goldilocks::EdwardsPoint::sum_of_products(&points, &scalars);
                     Ok(result.compress().as_bytes().to_vec())
                 }
                 #[cfg(feature = "jubjub")]
@@ -950,7 +960,7 @@ impl EcCurve {
                 Self::Pallas(curve) => {
                     let points = curve.parse_points_vec(&mut cursor, lengths[0])?;
                     let scalars = curve.parse_scalars_vec(&mut cursor, lengths[0])?;
-                    let result = pasta_curves::pallas::Point::sum_of_products(&points, &scalars);
+                    let result = pallas::Point::sum_of_products(&points, &scalars);
                     Ok(result.to_bytes().to_vec())
                 }
                 #[cfg(feature = "bls")]
@@ -977,7 +987,7 @@ impl EcCurve {
                         .into_iter()
                         .zip(scalars)
                         .fold(blsful::inner_types::Gt::IDENTITY, |acc, (p, s)| acc + p * s);
-                    Ok(result.to_bytes().to_vec())
+                    Ok(result.to_bytes().as_ref().to_vec())
                 }
             }
         }
@@ -1002,6 +1012,8 @@ impl EcCurve {
 
         match self {
             Self::Bls12381G1(_) | Self::Bls12381G2(_) | Self::Bls12381Gt(_) => {
+                use blsful::inner_types::MillerLoopResult;
+
                 let g1_points = blsful::inner_types::InnerBls12381G1
                     .parse_points_vec(&mut cursor, lengths[0])?;
                 let g2_points = blsful::inner_types::InnerBls12381G2
@@ -1014,7 +1026,7 @@ impl EcCurve {
                 let ref_t = points.iter().map(|(g1, g2)| (g1, g2)).collect::<Vec<_>>();
                 let result =
                     blsful::inner_types::multi_miller_loop(ref_t.as_slice()).final_exponentiation();
-                Ok(result.to_bytes().to_vec())
+                Ok(result.to_bytes().as_ref().to_vec())
             }
             _ => Err("pairing operation is not supported for this curve"),
         }
@@ -1426,7 +1438,7 @@ impl EcCurve {
                     if scalar[0].is_zero().into() {
                         return Ok(scalar[0].to_be_bytes().to_vec());
                     }
-                    let result = scalar[0].invert().expect("scalar is not invertible");
+                    let result = Field::invert(&scalar[0]).expect("scalar is not invertible");
                     Ok(result.to_be_bytes().to_vec())
                 }
                 #[cfg(feature = "bls")]
@@ -1435,7 +1447,7 @@ impl EcCurve {
                     if scalar[0].is_zero().into() {
                         return Ok(scalar[0].to_be_bytes().to_vec());
                     }
-                    let result = scalar[0].invert().expect("scalar is not invertible");
+                    let result = Field::invert(&scalar[0]).expect("scalar is not invertible");
                     Ok(result.to_be_bytes().to_vec())
                 }
                 #[cfg(feature = "bls")]
@@ -1444,7 +1456,7 @@ impl EcCurve {
                     if scalar[0].is_zero().into() {
                         return Ok(scalar[0].to_be_bytes().to_vec());
                     }
-                    let result = scalar[0].invert().expect("scalar is not invertible");
+                    let result = Field::invert(&scalar[0]).expect("scalar is not invertible");
                     Ok(result.to_be_bytes().to_vec())
                 }
             }
@@ -1966,8 +1978,7 @@ impl EcCurve {
                     return Err("invalid operation length. Must be at least 64 bytes");
                 }
                 let repr = k256::WideBytes::clone_from_slice(&data[..64]);
-                let scalar =
-                    <k256::Scalar as elliptic_curve::ops::Reduce<U512>>::reduce_bytes(&repr);
+                let scalar = <k256::Scalar as Reduce<U512>>::reduce_bytes(&repr);
                 Ok(scalar.to_bytes().to_vec())
             }
             #[cfg(feature = "curve25519")]
@@ -1975,7 +1986,7 @@ impl EcCurve {
                 if data.len() < 64 {
                     return Err("invalid operation length. Must be at least 64 bytes");
                 }
-                let scalar = curve25519_dalek_ml::Scalar::from_bytes_mod_order_wide(
+                let scalar = curve25519_dalek::Scalar::from_bytes_mod_order_wide(
                     (&data[..64]).try_into().unwrap(),
                 );
                 Ok(scalar.to_bytes().to_vec())
@@ -1985,9 +1996,8 @@ impl EcCurve {
                 if data.len() < 114 {
                     return Err("invalid operation length. Must be at least 114 bytes");
                 }
-                let wide_bytes =
-                    ed448_goldilocks_plus::WideScalarBytes::clone_from_slice(&data[..114]);
-                let scalar = ed448_goldilocks_plus::Scalar::from_bytes_mod_order_wide(&wide_bytes);
+                let wide_bytes = ed448_goldilocks::WideScalarBytes::clone_from_slice(&data[..114]);
+                let scalar = ed448_goldilocks::Scalar::from_bytes_mod_order_wide(&wide_bytes);
                 Ok(scalar.to_bytes_rfc_8032().to_vec())
             }
             #[cfg(feature = "jubjub")]
@@ -2012,7 +2022,7 @@ impl EcCurve {
                     return Err("invalid operation length. Must be at least 64 bytes");
                 }
                 let bytes = <[u8; 64]>::try_from(&data[..64]).unwrap();
-                let scalar = pasta_curves::pallas::Scalar::from_bytes_wide(&bytes);
+                let scalar = pallas::Scalar::from_bytes_wide(&bytes);
                 Ok(scalar.to_repr().to_vec())
             }
             #[cfg(feature = "bls")]
@@ -2063,7 +2073,7 @@ impl EcCurve {
                 #[cfg(feature = "p256")]
                 Self::P256(_) => {
                     let scalar = p256::NistP256::hash_to_scalar::<
-                        elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                        hash2curve::ExpandMsgXmd<sha2::Sha256>,
                     >(&[value], &[b"P256_XMD:SHA-256_RO_"])
                     .unwrap();
                     Ok(scalar.to_bytes().to_vec())
@@ -2071,7 +2081,7 @@ impl EcCurve {
                 #[cfg(feature = "p384")]
                 Self::P384(_) => {
                     let scalar = p384::NistP384::hash_to_scalar::<
-                        elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha384>,
+                        hash2curve::ExpandMsgXmd<sha2::Sha384>,
                     >(&[value], &[b"P384_XMD:SHA-384_RO_"])
                     .unwrap();
                     Ok(scalar.to_bytes().to_vec())
@@ -2079,29 +2089,29 @@ impl EcCurve {
                 #[cfg(feature = "k256")]
                 Self::K256(_) => {
                     let scalar = k256::Secp256k1::hash_to_scalar::<
-                        elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                        hash2curve::ExpandMsgXmd<sha2::Sha256>,
                     >(&[value], &[b"secp256k1_XMD:SHA-256_RO_"])
                     .expect("failed to hash to scalar");
                     Ok(scalar.to_bytes().to_vec())
                 }
                 #[cfg(feature = "curve25519")]
                 Self::Ed25519(_) | Self::Ristretto25519(_) => {
-                    let scalar =
-                        curve25519_dalek_ml::Scalar::hash_from_bytes::<sha2::Sha512>(value);
+                    let scalar = curve25519_dalek::Scalar::hash_from_bytes::<sha2::Sha512>(value);
                     Ok(scalar.to_bytes().to_vec())
                 }
                 #[cfg(feature = "ed448")]
                 Self::Ed448(_) => {
-                    let scalar = ed448_goldilocks_plus::Scalar::hash::<
-                        elliptic_curve::hash2curve::ExpandMsgXof<sha3::Shake256>,
+                    let scalar = ed448_goldilocks::Scalar::hash::<
+                        hash2curve::ExpandMsgXof<sha3::Shake256>,
                     >(value, b"edwards448_XOF:SHAKE-256_RO_");
                     Ok(scalar.to_bytes_rfc_8032().to_vec())
                 }
                 #[cfg(feature = "jubjub")]
                 Self::JubJub(_) => {
-                    let scalar = jubjub::Scalar::hash::<
-                        elliptic_curve::hash2curve::ExpandMsgXmd<blake2::Blake2b512>,
-                    >(value, b"jubjub_XMD:BLAKE2B-512_RO_");
+                    let scalar = jubjub::Scalar::hash::<hash2curve::ExpandMsgXmd<blake2::Blake2b512>>(
+                        value,
+                        b"jubjub_XMD:BLAKE2B-512_RO_",
+                    );
                     Ok(scalar.to_bytes().to_vec())
                 }
                 #[cfg(feature = "decaf377")]
@@ -2113,15 +2123,16 @@ impl EcCurve {
                 }
                 #[cfg(feature = "pasta")]
                 Self::Pallas(_) => {
-                    let scalar = pasta_curves::pallas::Scalar::hash::<
-                        elliptic_curve::hash2curve::ExpandMsgXmd<blake2::Blake2b512>,
-                    >(value, b"PALLAS_XMD:BLAKE2B-512");
+                    let scalar = pallas::Scalar::hash::<hash2curve::ExpandMsgXmd<blake2::Blake2b512>>(
+                        value,
+                        b"PALLAS_XMD:BLAKE2B-512",
+                    );
                     Ok(scalar.to_repr().to_vec())
                 }
                 #[cfg(feature = "bls")]
                 Self::Bls12381G1(_) | Self::Bls12381G2(_) | Self::Bls12381Gt(_) => {
                     let scalar = blsful::inner_types::Scalar::hash::<
-                        elliptic_curve::hash2curve::ExpandMsgXmd<sha2::Sha256>,
+                        hash2curve::ExpandMsgXmd<sha2::Sha256>,
                     >(value, b"BLS12381_XMD:SHA-256_RO_");
                     Ok(scalar.to_be_bytes().to_vec())
                 }
@@ -2339,19 +2350,19 @@ impl EcCurve {
                         hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
                     let mut e_arr = [0u8; 64];
                     e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
-                    let e = curve25519_dalek_ml::Scalar::from_bytes_mod_order_wide(&e_arr);
+                    let e = curve25519_dalek::Scalar::from_bytes_mod_order_wide(&e_arr);
                     let scalars = curve.parse_scalars::<1>(&mut cursor)?;
                     let s = scalars[0];
                     if s.is_zero().into() {
                         return Err("signature s cannot be zero");
                     }
                     let r = points[0];
-                    if curve25519_dalek_ml::traits::IsIdentity::is_identity(&r) {
+                    if curve25519_dalek::traits::IsIdentity::is_identity(&r) {
                         return Err("signature r cannot be zero");
                     }
 
                     let big_r =
-                        curve25519_dalek_ml::EdwardsPoint::vartime_double_scalar_mul_basepoint(
+                        curve25519_dalek::EdwardsPoint::vartime_double_scalar_mul_basepoint(
                             &e,
                             &-points[0],
                             &s,
@@ -2376,19 +2387,19 @@ impl EcCurve {
                         hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
                     let mut e_arr = [0u8; 64];
                     e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
-                    let e = curve25519_dalek_ml::Scalar::from_bytes_mod_order_wide(&e_arr);
+                    let e = curve25519_dalek::Scalar::from_bytes_mod_order_wide(&e_arr);
                     let scalars = curve.parse_scalars::<1>(&mut cursor)?;
                     let s = scalars[0];
                     if s.is_zero().into() {
                         return Err("signature s cannot be zero");
                     }
                     let r = points[0];
-                    if curve25519_dalek_ml::traits::IsIdentity::is_identity(&r) {
+                    if curve25519_dalek::traits::IsIdentity::is_identity(&r) {
                         return Err("signature r cannot be zero");
                     }
 
                     let big_r =
-                        curve25519_dalek_ml::RistrettoPoint::vartime_double_scalar_mul_basepoint(
+                        curve25519_dalek::RistrettoPoint::vartime_double_scalar_mul_basepoint(
                             &e,
                             &-points[0],
                             &s,
@@ -2410,9 +2421,9 @@ impl EcCurve {
                         .map_err(|_| "failed to read 57 bytes")?;
                     let e_bytes =
                         hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
-                    let mut e_arr = ed448_goldilocks_plus::WideScalarBytes::default();
+                    let mut e_arr = ed448_goldilocks::WideScalarBytes::default();
                     e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
-                    let e = ed448_goldilocks_plus::Scalar::from_bytes_mod_order_wide(&e_arr);
+                    let e = ed448_goldilocks::Scalar::from_bytes_mod_order_wide(&e_arr);
                     let scalars = curve.parse_scalars::<1>(&mut cursor)?;
                     let s = scalars[0];
                     if s.is_zero().into() {
@@ -2423,8 +2434,7 @@ impl EcCurve {
                         return Err("signature r cannot be zero");
                     }
 
-                    let big_r =
-                        (-points[0] * e) + ed448_goldilocks_plus::EdwardsPoint::GENERATOR * s;
+                    let big_r = (-points[0] * e) + ed448_goldilocks::EdwardsPoint::GENERATOR * s;
                     Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
                 }
                 #[cfg(feature = "jubjub")]
@@ -2473,7 +2483,7 @@ impl EcCurve {
                     let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes(), msg);
                     let mut e_arr = [0u8; 64];
                     e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
-                    let e = pasta_curves::pallas::Scalar::from_bytes_wide(&e_arr);
+                    let e = pallas::Scalar::from_bytes_wide(&e_arr);
                     let scalars = curve.parse_scalars::<1>(&mut cursor)?;
                     let s = scalars[0];
                     if s.is_zero().into() {
@@ -2550,6 +2560,8 @@ impl EcCurve {
                 }
                 #[cfg(feature = "bls")]
                 Self::Bls12381G2(curve) => {
+                    use lit_rust_crypto::blsful::inner_types;
+
                     cursor.set_position(cursor.position() + 32);
                     let msg = &data[position..position + 32];
                     let points = curve.parse_points::<1>(&mut cursor)?;
@@ -2563,7 +2575,7 @@ impl EcCurve {
                         .map_err(|_| "failed to read 192 bytes")?;
                     let e_bytes =
                         hasher.compute_challenge(&r_bytes, &points[0].to_compressed(), msg);
-                    let e = blsful::inner_types::Scalar::from_bytes_wide(
+                    let e = inner_types::Scalar::from_bytes_wide(
                         (&e_bytes[..64]).try_into().expect("invalid e bytes length"),
                     );
                     let scalars = curve.parse_scalars::<1>(&mut cursor)?;
@@ -2576,7 +2588,7 @@ impl EcCurve {
                         return Err("signature r cannot be zero");
                     }
 
-                    let big_r = blsful::inner_types::G2Projective::GENERATOR * s - points[0] * e;
+                    let big_r = inner_types::G2Projective::GENERATOR * s - points[0] * e;
                     Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
                 }
                 #[cfg(feature = "bls")]
@@ -2592,7 +2604,8 @@ impl EcCurve {
                     cursor
                         .read_exact(&mut r_bytes)
                         .map_err(|_| "failed to read 576 bytes")?;
-                    let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes(), msg);
+                    let e_bytes =
+                        hasher.compute_challenge(&r_bytes, points[0].to_bytes().as_ref(), msg);
                     let e = blsful::inner_types::Scalar::from_bytes_wide(
                         (&e_bytes[..64]).try_into().expect("invalid e bytes length"),
                     );
@@ -2607,7 +2620,12 @@ impl EcCurve {
                     }
 
                     let big_r = blsful::inner_types::Gt::generator() * s - points[0] * e;
-                    Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
+                    let mut output = 0u8;
+                    for (lhs, rhs) in big_r.to_bytes().as_ref().iter().zip(r.to_bytes().as_ref()) {
+                        output |= lhs ^ rhs;
+                    }
+
+                    Ok(vec![output])
                 }
             }
         }
@@ -2769,19 +2787,19 @@ impl EcCurve {
                         hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
                     let mut e_arr = [0u8; 64];
                     e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
-                    let e = curve25519_dalek_ml::Scalar::from_bytes_mod_order_wide(&e_arr);
+                    let e = curve25519_dalek::Scalar::from_bytes_mod_order_wide(&e_arr);
                     let scalars = curve.parse_scalars::<1>(&mut cursor)?;
                     let s = scalars[0];
                     if s.is_zero().into() {
                         return Err("signature s cannot be zero");
                     }
                     let r = points[0];
-                    if curve25519_dalek_ml::traits::IsIdentity::is_identity(&r) {
+                    if curve25519_dalek::traits::IsIdentity::is_identity(&r) {
                         return Err("signature r cannot be zero");
                     }
 
                     let big_r =
-                        curve25519_dalek_ml::EdwardsPoint::vartime_double_scalar_mul_basepoint(
+                        curve25519_dalek::EdwardsPoint::vartime_double_scalar_mul_basepoint(
                             &e, &points[0], &s,
                         )
                         .compress();
@@ -2804,19 +2822,19 @@ impl EcCurve {
                         hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
                     let mut e_arr = [0u8; 64];
                     e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
-                    let e = curve25519_dalek_ml::Scalar::from_bytes_mod_order_wide(&e_arr);
+                    let e = curve25519_dalek::Scalar::from_bytes_mod_order_wide(&e_arr);
                     let scalars = curve.parse_scalars::<1>(&mut cursor)?;
                     let s = scalars[0];
                     if s.is_zero().into() {
                         return Err("signature s cannot be zero");
                     }
                     let r = points[0];
-                    if curve25519_dalek_ml::traits::IsIdentity::is_identity(&r) {
+                    if curve25519_dalek::traits::IsIdentity::is_identity(&r) {
                         return Err("signature r cannot be zero");
                     }
 
                     let big_r =
-                        curve25519_dalek_ml::RistrettoPoint::vartime_double_scalar_mul_basepoint(
+                        curve25519_dalek::RistrettoPoint::vartime_double_scalar_mul_basepoint(
                             &e, &points[0], &s,
                         )
                         .compress();
@@ -2836,9 +2854,9 @@ impl EcCurve {
                         .map_err(|_| "failed to read 57 bytes")?;
                     let e_bytes =
                         hasher.compute_challenge(&r_bytes, points[0].compress().as_bytes(), msg);
-                    let mut e_arr = ed448_goldilocks_plus::WideScalarBytes::default();
+                    let mut e_arr = ed448_goldilocks::WideScalarBytes::default();
                     e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
-                    let e = ed448_goldilocks_plus::Scalar::from_bytes_mod_order_wide(&e_arr);
+                    let e = ed448_goldilocks::Scalar::from_bytes_mod_order_wide(&e_arr);
                     let scalars = curve.parse_scalars::<1>(&mut cursor)?;
                     let s = scalars[0];
                     if s.is_zero().into() {
@@ -2849,8 +2867,7 @@ impl EcCurve {
                         return Err("signature r cannot be zero");
                     }
 
-                    let big_r =
-                        (points[0] * e) + ed448_goldilocks_plus::EdwardsPoint::GENERATOR * s;
+                    let big_r = (points[0] * e) + ed448_goldilocks::EdwardsPoint::GENERATOR * s;
                     Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
                 }
                 #[cfg(feature = "jubjub")]
@@ -2898,7 +2915,7 @@ impl EcCurve {
                     let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes(), msg);
                     let mut e_arr = [0u8; 64];
                     e_arr[..e_bytes.len()].copy_from_slice(&e_bytes[..]);
-                    let e = pasta_curves::pallas::Scalar::from_bytes_wide(&e_arr);
+                    let e = pallas::Scalar::from_bytes_wide(&e_arr);
                     let scalars = curve.parse_scalars::<1>(&mut cursor)?;
                     let s = scalars[0];
                     if s.is_zero().into() {
@@ -3015,7 +3032,8 @@ impl EcCurve {
                     cursor
                         .read_exact(&mut r_bytes)
                         .map_err(|_| "failed to read 576 bytes")?;
-                    let e_bytes = hasher.compute_challenge(&r_bytes, &points[0].to_bytes(), msg);
+                    let e_bytes =
+                        hasher.compute_challenge(&r_bytes, points[0].to_bytes().as_ref(), msg);
                     let e = blsful::inner_types::Scalar::from_bytes_wide(
                         (&e_bytes[..64]).try_into().expect("invalid length"),
                     );
@@ -3030,7 +3048,17 @@ impl EcCurve {
                     }
 
                     let big_r = blsful::inner_types::Gt::generator() * s + points[0] * e;
-                    Ok(vec![big_r.ct_eq(&r).unwrap_u8()])
+                    let mut output = 0u8;
+                    for (lhs, rhs) in big_r
+                        .to_bytes()
+                        .as_ref()
+                        .iter()
+                        .zip(r.to_bytes().as_ref().iter())
+                    {
+                        output |= lhs ^ rhs;
+                    }
+
+                    Ok(vec![output])
                 }
             }
         }
