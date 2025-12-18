@@ -16,7 +16,7 @@ version = "1.0.5"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["k256", "ecops"]
+default = ["k256"]
 ecops = []
 curve25519 = ["lit-rust-crypto/curve25519-dalek", "lit-rust-crypto/vsss-rs", "sha2", "elliptic-curve-tools"]
 ed448 = ["lit-rust-crypto/ed448-goldilocks", "sha3", "elliptic-curve-tools"]
@@ -41,8 +41,7 @@ sha3 = { version = "0.10", default-features = false, optional = true }
 subtle = "2.6"
 
 [dependencies.lit-rust-crypto]
-git = "https://github.com/LIT-Protocol/lit-rust-crypto"
-tag = "0.6.0"
+version = "0.6.0"
 features = [
     "alloc",
     "arithmetic",
